@@ -41,7 +41,7 @@ rm -rf ~/Project/Booking/backend/public/* && cp -r ~/Project/Booking/frontend/di
 ### ৩. ZIP তৈরি করুন
 
 ```bash
-cd ~/Project/Booking && rm -f backend_deploy.zip && zip -r backend_deploy.zip backend/ --exclude "backend/node_modules/*" --exclude "backend/.env" --exclude "backend/*.db" --exclude "backend/bac.zip" --exclude "backend/public/ff.zip"
+cd ~/Project/Booking && rm -f backend_deploy.zip && zip -r backend_deploy.zip backend/ --exclude "backend/node_modules/*" --exclude "backend/.env" --exclude "backend/*.db" 
 ```
 
 তৈরি হওয়া `backend_deploy.zip` ফাইলটি cPanel এ আপলোড করে extract করুন।
