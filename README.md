@@ -22,6 +22,30 @@ Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.
 
 Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
 
+## cPanel Deployment
+
+আপনার টার্মিনালে নিচের তিনটি কমান্ড পর্যায়ক্রমে রান করুন:
+
+### ১. Angular বিল্ড করুন
+
+```bash
+cd ~/Project/Booking/frontend && npm run build
+```
+
+### ২. নতুন বিল্ড ফাইল backend/public/ ফোল্ডারে কপি করুন
+
+```bash
+rm -rf ~/Project/Booking/backend/public/* && cp -r ~/Project/Booking/frontend/dist/frontend/browser/. ~/Project/Booking/backend/public/
+```
+
+### ৩. ZIP তৈরি করুন
+
+```bash
+cd ~/Project/Booking && rm -f backend_deploy.zip && zip -r backend_deploy.zip backend/ --exclude "backend/node_modules/*" --exclude "backend/.env" --exclude "backend/*.db" --exclude "backend/bac.zip" --exclude "backend/public/ff.zip"
+```
+
+তৈরি হওয়া `backend_deploy.zip` ফাইলটি cPanel এ আপলোড করে extract করুন।
+
 ## Further help
 
 To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
