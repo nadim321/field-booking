@@ -1,0 +1,11 @@
+Options -MultiViews
+RewriteEngine On
+
+# Route /api/* requests to Node.js backend running on port 5000
+RewriteCond %{REQUEST_URI} ^/api/.*
+RewriteRule ^api/(.*)$ http://localhost:5000/api/$1 [P,L]
+
+# Handle Angular routing - serve index.html for all non-file requests
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]

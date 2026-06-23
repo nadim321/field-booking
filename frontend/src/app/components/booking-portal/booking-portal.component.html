@@ -1,0 +1,227 @@
+<div class="portal-container">
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="logo">
+      <span class="ball-icon">⚽</span>
+      <span class="logo-text">KICKOFF <span class="accent">ARENA</span></span>
+    </div>
+    <nav>
+      <a routerLink="/admin/login" class="btn btn-secondary admin-btn">Admin Panel</a>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="badge">🔥 Premium 7-a-side Artificial Turf</span>
+      <h1>Select a Slot & Start Playing</h1>
+      <p>Enjoy under-lights football with top-tier grass, spacious changing rooms, and free parking.</p>
+    </div>
+  </section>
+
+  <!-- Main Booking Area -->
+  <main class="booking-section">
+    <!-- Date picker and controls -->
+    <div class="controls-card">
+      <div class="control-group">
+        <label for="booking-date">Choose Playing Date</label>
+        <div class="input-wrapper">
+          <input type="date" id="booking-date" [(ngModel)]="selectedDate" (change)="onDateChange()"
+            class="form-control date-input" [min]="todayDate" />
+        </div>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><span class="dot available"></span> Available</span>
+        <span class="legend-item"><span class="dot pending"></span> Pending Approval</span>
+        <span class="legend-item"><span class="dot booked"></span> Booked / Occupied</span>
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <div *ngIf="errorMsg" class="alert error-alert">
+      <span class="alert-icon">⚠️</span>
+      <p>{{ errorMsg }}</p>
+      <button (click)="loadSlots()" class="btn btn-sm btn-outline">Try Again</button>
+    </div>
+
+    <!-- Loading state -->
+    <div *ngIf="loading" class="spinner-container">
+      <div class="spinner"></div>
+      <p>Loading Turf Availability...</p>
+    </div>
+
+    <!-- Slots Grid Container -->
+    <div *ngIf="!loading && !errorMsg" class="slots-container">
+
+      <!-- Morning Slots -->
+      <div class="category-block" *ngIf="getSlotsByCategory('morning').length > 0">
+        <h3>🌅 Morning slots (06:00 AM - 12:00 PM)</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getSlotsByCategory('morning')" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="openBookingModal(slot)">
+            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ slot.status | uppercase }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Afternoon Slots -->
+      <div class="category-block" *ngIf="getSlotsByCategory('afternoon').length > 0">
+        <h3>☀️ Afternoon slots (12:00 PM - 04:00 PM)</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getSlotsByCategory('afternoon')" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="openBookingModal(slot)">
+            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ slot.status | uppercase }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evening Slots -->
+      <div class="category-block" *ngIf="getSlotsByCategory('evening').length > 0">
+        <h3>🌇 Evening Peak slots (04:00 PM - 06:00 PM)</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getSlotsByCategory('evening')" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="openBookingModal(slot)">
+            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ slot.status | uppercase }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Night Slots -->
+      <div class="category-block" *ngIf="getSlotsByCategory('night').length > 0">
+        <h3>🌃 Under-Lights Night slots (06:00 PM - 11:00 PM)</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getSlotsByCategory('night')" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="openBookingModal(slot)">
+            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ slot.status | uppercase }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="slots.length === 0" class="no-slots">
+        <p>No active slots available for this date. Please configure turf slots in admin panel.</p>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2025 Gazipur Turf. All Rights Reserved. Located at Dhanmondi, Dhaka.</p>
+    <p>Contact: +88017XXXXXXXX | email: play&#64;gazipurturf.com</p>
+  </footer>
+</div>
+
+<!-- Booking Modal Dialog -->
+<div class="modal-backdrop" *ngIf="showModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Confirm Turf Booking</h2>
+      <button class="close-btn" (click)="closeBookingModal()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="slot-summary">
+        <div class="summary-item">
+          <span class="label">Date:</span>
+          <span class="val">{{ selectedDate }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Time Slot:</span>
+          <span class="val highlight">{{ selectedSlot?.start_time }} - {{ selectedSlot?.end_time }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Price:</span>
+          <span class="val highlight">৳ {{ selectedSlot?.price }}</span>
+        </div>
+      </div>
+
+      <form (ngSubmit)="submitBooking()" #bookingForm="ngForm">
+        <div class="form-group">
+          <label for="custName">Customer Name <span class="req">*</span></label>
+          <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required
+            placeholder="Enter your name" #nameInput="ngModel" />
+          <span class="form-err" *ngIf="nameInput.touched && !customerName">Name is required</span>
+        </div>
+
+        <div class="form-group">
+          <label for="custPhone">Phone Number <span class="req">*</span></label>
+          <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" class="form-control" required
+            placeholder="017XXXXXXXX" #phoneInput="ngModel" />
+          <span class="form-err" *ngIf="phoneInput.touched && !customerPhone">Phone number is required</span>
+        </div>
+
+        <div class="form-group">
+          <label for="teamName">Team Name <span class="opt">(Optional)</span></label>
+          <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control"
+            placeholder="e.g. Dream Team FC" />
+        </div>
+
+        <div class="form-group">
+          <label for="custEmail">Email Address <span class="opt">(Optional)</span></label>
+          <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control"
+            placeholder="yourname@gmail.com" />
+        </div>
+
+        <div class="form-group">
+          <label>Payment Method</label>
+          <div class="payment-options">
+            <label class="pay-option">
+              <input type="radio" name="payMethod" value="later" [(ngModel)]="paymentMethod" checked />
+              <div class="pay-card">
+                <span class="pay-icon">⏱️</span>
+                <span class="pay-text">Book Now, Pay Later</span>
+              </div>
+            </label>
+            <label class="pay-option">
+              <input type="radio" name="payMethod" value="bkash" [(ngModel)]="paymentMethod" />
+              <div class="pay-card">
+                <span class="pay-icon">📱</span>
+                <span class="pay-text">Bkash / Mobile Pay</span>
+              </div>
+            </label>
+            <label class="pay-option">
+              <input type="radio" name="payMethod" value="card" [(ngModel)]="paymentMethod" />
+              <div class="pay-card">
+                <span class="pay-icon">💳</span>
+                <span class="pay-text">Credit / Debit Card</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeBookingModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="!bookingForm.valid || loading">
+            {{ paymentMethod === 'later' ? 'Request Booking' : 'Proceed to Payment' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
+  <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
+  <span class="toast-text">{{ toastMsg }}</span>
+</div>
