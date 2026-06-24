@@ -22,7 +22,7 @@ initConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``, (err) => {
   }
   console.log(`MySQL Database '${dbName}' verified/created.`);
   initConnection.end();
-  
+
   // Step 2: Initialize connection pool
   initializePool();
 });
@@ -49,8 +49,8 @@ const dbWrapper = {
       }
     });
   },
-  run: function(sql, params, cb) {
-    pool.query(sql, params, function(err, result) {
+  run: function (sql, params, cb) {
+    pool.query(sql, params, function (err, result) {
       const context = {
         lastID: result ? result.insertId : null,
         changes: result ? result.affectedRows : null
@@ -63,10 +63,10 @@ const dbWrapper = {
   prepare: (sql) => {
     const runs = [];
     return {
-      run: function(...args) {
+      run: function (...args) {
         runs.push(args);
       },
-      finalize: function(cb) {
+      finalize: function (cb) {
         let completed = 0;
         let hasError = null;
         if (runs.length === 0) {
@@ -122,6 +122,7 @@ function initializePool() {
 
       dbWrapper.run(`
         CREATE TABLE IF NOT EXISTS bookings (
+          UNIQUE KEY uq_slot_date (slot_id, booking_date),
           id INT AUTO_INCREMENT PRIMARY KEY,
           slot_id INT NOT NULL,
           booking_date VARCHAR(50) NOT NULL,
@@ -136,7 +137,7 @@ function initializePool() {
         ) ENGINE=InnoDB
       `, [], (err) => {
         if (err) console.error("Error creating bookings table:", err.message);
-        
+
         seedData();
       });
     });

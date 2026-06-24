@@ -168,6 +168,9 @@ app.post('/api/bookings', (req, res) => {
           [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name],
           function (err) {
             if (err) {
+              if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ message: 'This slot was just taken by another request' });
+              }
               return res.status(500).json({ message: 'Failed to create booking request', error: err.message });
             }
 
