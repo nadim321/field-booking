@@ -9,6 +9,7 @@ const { generateToken } = require('./utils/token');
 
 const db = require('./database');
 const authenticateAdmin = require('./middleware/auth');
+const notificationService = require('./services/notifications/notification.service');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -299,6 +300,18 @@ app.post('/api/slots/confirm', (req, res) => {
                       });
                     }
                     connection.release();
+
+                    // Fire-and-forget: notification failures must never
+                    // affect the booking response already sent below.
+                    notificationService.notifyBookingCreated({
+                      id: result.insertId,
+                      booking_date,
+                      customer_name,
+                      customer_phone,
+                      customer_email,
+                      team_name
+                    });
+
                     res.status(201).json({
                       message: 'Booking confirmed',
                       booking_id: result.insertId,
@@ -356,6 +369,15 @@ app.post('/api/bookings', (req, res) => {
               }
               return res.status(500).json({ message: 'Failed to create booking request', error: err.message });
             }
+
+            notificationService.notifyBookingCreated({
+              id: this.lastID,
+              booking_date,
+              customer_name,
+              customer_phone,
+              customer_email,
+              team_name
+            });
 
             res.status(201).json({
               message: 'Booking request submitted successfully! Pending admin approval.',
@@ -427,17 +449,43 @@ app.put('/api/admin/bookings/:id', authenticateAdmin, (req, res) => {
 
   params.push(id);
 
-  db.run(
-    `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
-    params,
-    function (err) {
-      if (err) {
-        return res.status(500).json({ message: 'Failed to update booking', error: err.message });
+  // Fetch booking + slot details first so we have customer contact info
+  // and slot timing available for the notification, regardless of which
+  // fields the UPDATE below actually changes.
+  db.get(
+    `SELECT b.*, s.start_time, s.end_time, s.price
+     FROM bookings b
+     JOIN slots s ON b.slot_id = s.id
+     WHERE b.id = ?`,
+    [id],
+    (fetchErr, bookingBeforeUpdate) => {
+      if (fetchErr) {
+        return res.status(500).json({ message: 'Failed to look up booking', error: fetchErr.message });
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ message: 'Booking not found' });
-      }
-      res.json({ message: 'Booking updated successfully' });
+
+      db.run(
+        `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
+        params,
+        function (err) {
+          if (err) {
+            return res.status(500).json({ message: 'Failed to update booking', error: err.message });
+          }
+          if (this.changes === 0) {
+            return res.status(404).json({ message: 'Booking not found' });
+          }
+
+          // Fire the relevant notification based on what status changed to.
+          // bookingBeforeUpdate may be null if the booking vanished between
+          // the SELECT and UPDATE (extremely unlikely) -- guard against that.
+          if (bookingBeforeUpdate && status === 'approved') {
+            notificationService.notifyBookingApproved(bookingBeforeUpdate);
+          } else if (bookingBeforeUpdate && status === 'cancelled') {
+            notificationService.notifyBookingCancelled(bookingBeforeUpdate);
+          }
+
+          res.json({ message: 'Booking updated successfully' });
+        }
+      );
     }
   );
 });
@@ -675,18 +723,33 @@ app.get('/api/payments/mock-redirect', (req, res) => {
         return res.status(500).send('<h1>Database error during payment verification</h1>');
       }
 
-      // In a real app, this redirects back to the Angular frontend success page
-      res.send(`
-        <div style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px; padding: 20px;">
-          <h1 style="color: #047857;">⚽ Payment Successful!</h1>
-          <p style="font-size: 18px; color: #4b5563;">Your payment has been successfully processed.</p>
-          <p><strong>Booking ID:</strong> ${booking_id}</p>
-          <p><strong>Transaction ID:</strong> ${trx_id}</p>
-          <p style="margin-top: 30px;">
-            <a href="http://localhost:4200/" style="background-color: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Return to Turf Site</a>
-          </p>
-        </div>
-      `);
+      // Fetch full booking + slot details for the notification (the
+      // UPDATE above only returns affected-row info, not the row itself).
+      db.get(
+        `SELECT b.*, s.start_time, s.end_time, s.price
+         FROM bookings b
+         JOIN slots s ON b.slot_id = s.id
+         WHERE b.id = ?`,
+        [booking_id],
+        (fetchErr, fullBooking) => {
+          if (!fetchErr && fullBooking) {
+            notificationService.notifyPaymentReceived(fullBooking);
+          }
+
+          // In a real app, this redirects back to the Angular frontend success page
+          res.send(`
+            <div style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px; padding: 20px;">
+              <h1 style="color: #047857;">⚽ Payment Successful!</h1>
+              <p style="font-size: 18px; color: #4b5563;">Your payment has been successfully processed.</p>
+              <p><strong>Booking ID:</strong> ${booking_id}</p>
+              <p><strong>Transaction ID:</strong> ${trx_id}</p>
+              <p style="margin-top: 30px;">
+                <a href="http://localhost:4200/" style="background-color: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Return to Turf Site</a>
+              </p>
+            </div>
+          `);
+        }
+      );
     }
   );
 });
