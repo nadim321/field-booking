@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 require('dotenv').config();
+const crypto = require('crypto');
+const { generateToken } = require('./utils/token');
 
 const db = require('./database');
 const authenticateAdmin = require('./middleware/auth');
@@ -91,9 +93,9 @@ app.get('/api/slots/available', (req, res) => {
 
     // Next, get all approved/pending bookings for this date
     db.all(
-      `SELECT b.*, s.start_time, s.end_time 
-       FROM bookings b 
-       JOIN slots s ON b.slot_id = s.id 
+      `SELECT b.*, s.start_time, s.end_time
+       FROM bookings b
+       JOIN slots s ON b.slot_id = s.id
        WHERE b.booking_date = ? AND b.status IN ('pending', 'approved')`,
       [date],
       (err, bookings) => {
@@ -101,38 +103,219 @@ app.get('/api/slots/available', (req, res) => {
           return res.status(500).json({ message: 'Failed to retrieve bookings', error: err.message });
         }
 
-        // Map slot config and join bookings info
-        const result = visibleSlots.map(slot => {
-          const bookingForSlot = bookings.find(b => b.slot_id === slot.id);
+        // Also fetch active holds for this date
+        db.all(
+          `SELECT slot_id FROM slot_holds WHERE booking_date = ? AND expires_at > CURRENT_TIMESTAMP`,
+          [date],
+          (err, holds) => {
+            if (err) {
+              return res.status(500).json({ message: 'Failed to retrieve slot holds', error: err.message });
+            }
+            const heldSlotIds = holds.map(h => h.slot_id);
 
-          // For today, if slot has started but not yet ended, mark as unavailable for new booking
-          const hasStarted = isToday && slot.start_time <= currentTimeStr;
+            // Map slot config and join bookings info
+            const result = visibleSlots.map(slot => {
+              const bookingForSlot = bookings.find(b => b.slot_id === slot.id);
+              const isHeld = heldSlotIds.includes(slot.id);
 
-          return {
-            id: slot.id,
-            start_time: slot.start_time,
-            end_time: slot.end_time,
-            price: slot.price,
-            is_active: slot.is_active,
-            status: bookingForSlot
-              ? bookingForSlot.status
-              : hasStarted ? 'approved' : 'available', // treat in-progress as booked visually
-            booking_details: bookingForSlot ? {
-              booking_id: bookingForSlot.id,
-              team_name: bookingForSlot.team_name,
-              payment_status: bookingForSlot.payment_status
-            } : null
-          };
-        });
+              return {
+                id: slot.id,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                price: slot.price,
+                is_active: slot.is_active,
+                status: bookingForSlot ? bookingForSlot.status : isHeld ? 'held' : 'available',
+                booking_details: bookingForSlot ? {
+                  booking_id: bookingForSlot.id,
+                  team_name: bookingForSlot.team_name,
+                  payment_status: bookingForSlot.payment_status
+                } : null
+              };
+            });
 
-        res.json({ date, slots: result, server_time: currentTimeStr, is_today: isToday });
+            res.json({ date, slots: result, server_time: currentTimeStr, is_today: isToday });
+          }
+        );
       }
     );
   });
 });
 
-
 // 3. Request a Booking (Customer Facing)
+// NOTE: Existing direct booking endpoint retained for admin/legacy usage. New flow uses hold + confirm.
+
+// 3a. Create a temporary hold when booking form is opened
+app.post('/api/slots/hold', (req, res) => {
+  const { slot_id, booking_date } = req.body;
+  if (!slot_id || !booking_date) {
+    return res.status(400).json({ message: 'slot_id and booking_date are required' });
+  }
+  // Verify slot is active
+  db.get('SELECT * FROM slots WHERE id = ? AND is_active = 1', [slot_id], (err, slot) => {
+    if (err) return res.status(500).json({ message: 'Database error', error: err.message });
+    if (!slot) return res.status(400).json({ message: 'Invalid or inactive slot' });
+
+    // Reject if slot is already booked (pending/approved) for this date
+    db.get(
+      "SELECT * FROM bookings WHERE slot_id = ? AND booking_date = ? AND status IN ('pending', 'approved')",
+      [slot_id, booking_date],
+      (err, booking) => {
+        if (err) return res.status(500).json({ message: 'Database error', error: err.message });
+        if (booking) return res.status(409).json({ message: 'This slot is already booked for the selected date' });
+
+        // Reject if another *live* hold exists for this slot/date.
+        // Expired holds for the same slot_id/booking_date are deliberately
+        // ignored here (and cleared below) -- there is no UNIQUE constraint
+        // on (slot_id, booking_date) in slot_holds, so an old expired hold
+        // can never block a brand new one.
+        db.get(
+          `SELECT * FROM slot_holds WHERE slot_id = ? AND booking_date = ? AND expires_at > CURRENT_TIMESTAMP`,
+          [slot_id, booking_date],
+          (err, liveHold) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err.message });
+            if (liveHold) return res.status(409).json({ message: 'Slot already held' });
+
+            // Clear any stale expired holds for this slot/date before inserting
+            db.run(
+              `DELETE FROM slot_holds WHERE slot_id = ? AND booking_date = ? AND expires_at <= CURRENT_TIMESTAMP`,
+              [slot_id, booking_date],
+              (err) => {
+                if (err) return res.status(500).json({ message: 'Failed to clear stale hold', error: err.message });
+
+                const session_token = generateToken();
+                const expiryMinutes = process.env.HOLD_EXPIRY_MINUTES ? parseInt(process.env.HOLD_EXPIRY_MINUTES) : 7;
+                const expires_at = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+                db.run(
+                  `INSERT INTO slot_holds (slot_id, booking_date, session_token, expires_at) VALUES (?, ?, ?, ?)`,
+                  [slot_id, booking_date, session_token, expires_at],
+                  function (err) {
+                    if (err) {
+                      if (err.code === 'ER_DUP_ENTRY') {
+                        return res.status(409).json({ message: 'Slot already held' });
+                      }
+                      return res.status(500).json({ message: 'Failed to create hold', error: err.message });
+                    }
+                    res.json({ session_token, expires_at });
+                  }
+                );
+              }
+            );
+          }
+        );
+      }
+    );
+  });
+});
+
+// 3b. Cancel a hold immediately (user clicked Cancel / closed the modal)
+app.delete('/api/slots/hold', (req, res) => {
+  const { slot_id, booking_date, session_token } = req.body;
+  if (!session_token) {
+    return res.status(400).json({ message: 'session_token is required' });
+  }
+
+  // session_token is unique on its own, but slot_id/booking_date are
+  // accepted too (if present) as a defensive double-check against
+  // deleting the wrong row.
+  const conditions = ['session_token = ?'];
+  const params = [session_token];
+  if (slot_id) {
+    conditions.push('slot_id = ?');
+    params.push(slot_id);
+  }
+  if (booking_date) {
+    conditions.push('booking_date = ?');
+    params.push(booking_date);
+  }
+
+  db.run(
+    `DELETE FROM slot_holds WHERE ${conditions.join(' AND ')}`,
+    params,
+    function (err) {
+      if (err) {
+        return res.status(500).json({ message: 'Failed to cancel hold', error: err.message });
+      }
+      // Not finding a row to delete isn't an error from the client's point
+      // of view -- the hold may have already expired or been confirmed.
+      res.json({ message: 'Hold cancelled', deleted: this.changes > 0 });
+    }
+  );
+});
+
+// 3c. Confirm booking using a valid hold
+app.post('/api/slots/confirm', (req, res) => {
+  const { slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, session_token } = req.body;
+  if (!slot_id || !booking_date || !customer_name || !customer_phone || !session_token) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+  // Verify hold exists and is valid
+  db.get(
+    `SELECT * FROM slot_holds WHERE slot_id = ? AND booking_date = ? AND session_token = ? AND expires_at > CURRENT_TIMESTAMP`,
+    [slot_id, booking_date, session_token],
+    (err, hold) => {
+      if (err) return res.status(500).json({ message: 'Database error', error: err.message });
+      if (!hold) return res.status(400).json({ message: 'Invalid or expired hold token' });
+      // Transaction: insert booking then delete hold
+      db.getConnection((connErr, connection) => {
+        if (connErr) return res.status(500).json({ message: 'Failed to obtain DB connection', error: connErr.message });
+        connection.beginTransaction(trxErr => {
+          if (trxErr) {
+            connection.release();
+            return res.status(500).json({ message: 'Transaction start error', error: trxErr.message });
+          }
+          // Insert booking
+          connection.query(
+            `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid')`,
+            [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name],
+            (insErr, result) => {
+              if (insErr) {
+                return connection.rollback(() => {
+                  connection.release();
+                  if (insErr.code === 'ER_DUP_ENTRY') {
+                    res.status(409).json({ message: 'Slot already booked' });
+                  } else {
+                    res.status(500).json({ message: 'Failed to create booking', error: insErr.message });
+                  }
+                });
+              }
+              // Delete hold
+              connection.query(
+                'DELETE FROM slot_holds WHERE id = ?',
+                [hold.id],
+                (delErr) => {
+                  if (delErr) {
+                    return connection.rollback(() => {
+                      connection.release();
+                      res.status(500).json({ message: 'Failed to delete hold', error: delErr.message });
+                    });
+                  }
+                  connection.commit(commitErr => {
+                    if (commitErr) {
+                      return connection.rollback(() => {
+                        connection.release();
+                        res.status(500).json({ message: 'Commit error', error: commitErr.message });
+                      });
+                    }
+                    connection.release();
+                    res.status(201).json({
+                      message: 'Booking confirmed',
+                      booking_id: result.insertId,
+                      details: { slot_id, booking_date, customer_name, customer_phone, team_name }
+                    });
+                  });
+                }
+              );
+            }
+          );
+        });
+      });
+    }
+  );
+});
+
+// NOTE: Existing direct booking endpoint retained for admin/legacy usage. New flow uses hold + confirm.
 app.post('/api/bookings', (req, res) => {
   const { slot_id, booking_date, customer_name, customer_phone, customer_email, team_name } = req.body;
 
@@ -345,6 +528,15 @@ app.delete('/api/admin/slots/:id', authenticateAdmin, (req, res) => {
 });
 
 // 5. Admin Dashboard Statistics
+// Endpoint to manually trigger cleanup of expired holds (for admin use)
+app.post('/api/admin/cleanup-holds', authenticateAdmin, (req, res) => {
+  db.run('DELETE FROM slot_holds WHERE expires_at <= CURRENT_TIMESTAMP', [], function (err) {
+    if (err) {
+      return res.status(500).json({ message: 'Cleanup failed', error: err.message });
+    }
+    res.json({ message: 'Expired holds cleaned', rowsDeleted: this.changes });
+  });
+});
 app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
   const stats = {};
 

@@ -32,6 +32,7 @@
       </div>
       <div class="legend">
         <span class="legend-item"><span class="dot available"></span> Available</span>
+        <span class="legend-item"><span class="dot held"></span> Held</span>
         <span class="legend-item"><span class="dot pending"></span> Pending Approval</span>
         <span class="legend-item"><span class="dot booked"></span> Booked / Occupied</span>
       </div>
@@ -59,9 +60,10 @@
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory('morning')" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
-            }" (click)="openBookingModal(slot)">
+            }" (click)="onSlotClick(slot)">
             <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
             <div class="status-badge">{{ slot.status | uppercase }}</div>
@@ -75,9 +77,10 @@
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory('afternoon')" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
-            }" (click)="openBookingModal(slot)">
+            }" (click)="onSlotClick(slot)">
             <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
             <div class="status-badge">{{ slot.status | uppercase }}</div>
@@ -91,9 +94,10 @@
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory('evening')" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
-            }" (click)="openBookingModal(slot)">
+            }" (click)="onSlotClick(slot)">
             <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
             <div class="status-badge">{{ slot.status | uppercase }}</div>
@@ -107,9 +111,10 @@
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory('night')" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
-            }" (click)="openBookingModal(slot)">
+            }" (click)="onSlotClick(slot)">
             <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
             <div class="status-badge">{{ slot.status | uppercase }}</div>
@@ -153,6 +158,14 @@
           <span class="label">Price:</span>
           <span class="val highlight">৳ {{ selectedSlot?.price }}</span>
         </div>
+      </div>
+
+      <!-- Hold countdown -->
+      <div class="hold-timer" *ngIf="holdInfo" [class.hold-timer-warning]="remainingSeconds <= 60">
+        <span class="hold-timer-icon">⏳</span>
+        <span class="hold-timer-text">
+          Slot held for you — complete booking within <strong>{{ remainingMinutesLabel }}</strong>
+        </span>
       </div>
 
       <form (ngSubmit)="submitBooking()" #bookingForm="ngForm">

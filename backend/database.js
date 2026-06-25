@@ -31,6 +31,9 @@ let pool;
 
 // Compatibility shim mapping sqlite3 callbacks to mysql2 pooling structure
 const dbWrapper = {
+  getConnection: (cb) => {
+    pool.getConnection(cb);
+  },
   all: (sql, params, cb) => {
     pool.query(sql, params, (err, results) => {
       if (err) {
@@ -120,25 +123,57 @@ function initializePool() {
     `, [], (err) => {
       if (err) console.error("Error creating slots table:", err.message);
 
+      // NOTE: No UNIQUE KEY on (slot_id, booking_date) here.
+      // A unique constraint on those two columns would permanently block
+      // re-holding a slot/date combination once a hold for it had ever
+      // existed, even after that hold expired (UNIQUE doesn't care about
+      // expires_at). Instead, "is this slot/date free to hold" is decided
+      // at query time by filtering on expires_at > NOW(), exactly like the
+      // existing /api/slots/available logic already does for reads.
       dbWrapper.run(`
-        CREATE TABLE IF NOT EXISTS bookings (
-          UNIQUE KEY uq_slot_date (slot_id, booking_date),
+        CREATE TABLE IF NOT EXISTS slot_holds (
           id INT AUTO_INCREMENT PRIMARY KEY,
           slot_id INT NOT NULL,
           booking_date VARCHAR(50) NOT NULL,
-          customer_name VARCHAR(255) NOT NULL,
-          customer_phone VARCHAR(50) NOT NULL,
-          customer_email VARCHAR(255),
-          team_name VARCHAR(255),
-          status VARCHAR(50) DEFAULT 'pending',
-          payment_status VARCHAR(50) DEFAULT 'unpaid',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+          session_token VARCHAR(255) NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE,
+          INDEX idx_slot_date_expiry (slot_id, booking_date, expires_at)
         ) ENGINE=InnoDB
       `, [], (err) => {
-        if (err) console.error("Error creating bookings table:", err.message);
 
-        seedData();
+        if (err) {
+          console.error("Error creating slot_holds table:", err.message);
+          return;
+        }
+
+        dbWrapper.run(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      slot_id INT NOT NULL,
+      booking_date VARCHAR(50) NOT NULL,
+      customer_name VARCHAR(255) NOT NULL,
+      customer_phone VARCHAR(50) NOT NULL,
+      customer_email VARCHAR(255),
+      team_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'pending',
+      payment_status VARCHAR(50) DEFAULT 'unpaid',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT uq_slot_date UNIQUE (slot_id, booking_date),
+
+      FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `, [], (err) => {
+
+          if (err) {
+            console.error("Error creating bookings table:", err.message);
+            return;
+          }
+
+          seedData();
+        });
+
       });
     });
   });

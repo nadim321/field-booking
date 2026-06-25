@@ -39,7 +39,7 @@ export class ApiService {
   isLoggedIn(): boolean {
     const token = this.token;
     if (!token) return false;
-    
+
     // Simple JWT expiration check
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
@@ -65,6 +65,8 @@ export class ApiService {
     return this.http.get<any>(`${`${this.apiUrl}/slots/available`}?date=${date}`);
   }
 
+  // Legacy direct-booking endpoint. Retained for admin/legacy usage; the
+  // customer booking portal now uses holdSlot() + confirmBooking() instead.
   createBooking(bookingData: {
     slot_id: number;
     booking_date: string;
@@ -74,6 +76,40 @@ export class ApiService {
     team_name?: string;
   }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/bookings`, bookingData);
+  }
+
+  // --- Hold / Confirm Flow ---
+
+  /** Places a temporary hold on a slot. Returns { session_token, expires_at }. */
+  holdSlot(slotId: number, bookingDate: string): Observable<{ session_token: string; expires_at: string }> {
+    return this.http.post<{ session_token: string; expires_at: string }>(`${this.apiUrl}/slots/hold`, {
+      slot_id: slotId,
+      booking_date: bookingDate
+    });
+  }
+
+  /** Cancels an active hold immediately (user clicked Cancel / closed the modal). */
+  cancelHold(slotId: number, bookingDate: string, sessionToken: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/slots/hold`, {
+      body: {
+        slot_id: slotId,
+        booking_date: bookingDate,
+        session_token: sessionToken
+      }
+    });
+  }
+
+  /** Confirms a booking against a still-valid hold. */
+  confirmBooking(bookingData: {
+    slot_id: number;
+    booking_date: string;
+    customer_name: string;
+    customer_phone: string;
+    customer_email?: string;
+    team_name?: string;
+    session_token: string;
+  }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/slots/confirm`, bookingData);
   }
 
   initiatePayment(bookingId: number, paymentMethod: string): Observable<any> {
