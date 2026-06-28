@@ -10,7 +10,9 @@ interface TurfSlot {
   end_time: string;
   price: number;
   is_active: number;
-  status: 'available' | 'held' | 'pending' | 'approved';
+  category: number | null;
+  category_label: string | null;
+  status: 'available' | 'held' | 'season_reserved' | 'pending' | 'approved';
   booking_details?: {
     booking_id: number;
     team_name?: string;
@@ -119,14 +121,44 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     this.loadSlots();
   }
 
-  getSlotsByCategory(category: 'morning' | 'afternoon' | 'evening' | 'night'): TurfSlot[] {
-    return this.slots.filter(slot => {
-      const hour = parseInt(slot.start_time.split(':')[0]);
-      if (category === 'morning') return hour >= 6 && hour < 12;
-      if (category === 'afternoon') return hour >= 12 && hour < 16;
-      if (category === 'evening') return hour >= 16 && hour < 18;
-      return hour >= 18 || hour < 6;
-    });
+  /** Filters slots by their stored category field (set manually by the
+   * admin -- never derived from start_time). Slots with no category
+   * assigned yet (category === null) are deliberately excluded here and
+   * shown separately via getUncategorizedSlots(), so nothing silently
+   * disappears from the page while waiting to be categorized. */
+  getSlotsByCategory(categoryId: number): TurfSlot[] {
+    return this.slots.filter(slot => slot.category === categoryId);
+  }
+
+  getUncategorizedSlots(): TurfSlot[] {
+    return this.slots.filter(slot => slot.category === null || slot.category === undefined);
+  }
+
+  /** Clean display text for the status badge (avoids showing a raw
+   * underscore like "SEASON_RESERVED" to the customer). */
+  statusLabel(status: TurfSlot['status']): string {
+    if (status === 'season_reserved') return 'SEASON BOOKING';
+    return status.toUpperCase();
+  }
+
+  /** Converts a 24h "HH:MM" string to a friendly 12h "H:MM AM/PM" string.
+   * Handles midnight ("00:00" -> "12:00 AM") and noon ("12:00" -> "12:00 PM")
+   * correctly rather than showing "0:00". */
+  formatTime12h(time24: string): string {
+    const [hourStr, minuteStr] = time24.split(':');
+    const hour = parseInt(hourStr, 10);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    let displayHour = hour % 12;
+    if (displayHour === 0) displayHour = 12;
+    return `${displayHour}:${minuteStr} ${period}`;
+  }
+
+  /** Friendly "6:00 PM - 7:00 PM" style range for a slot card. Accepts
+   * null so it can be called directly on `selectedSlot` in the modal,
+   * which may be null before a slot is chosen. */
+  formatTimeRange(slot: TurfSlot | null): string {
+    if (!slot) return '';
+    return `${this.formatTime12h(slot.start_time)} - ${this.formatTime12h(slot.end_time)}`;
   }
 
   /**

@@ -92,9 +92,89 @@ function notifyPaymentReceived(booking) {
   return dispatch(booking, templates.paymentReceived, 'payment_received');
 }
 
+/**
+ * Sends an email-only notification to the SEASON CUSTOMER (no SMS for
+ * this one is also fine to add later, but per spec the conflict notice
+ * is naturally low-frequency/informational, so email-first keeps this
+ * simple; SMS can be added the same way bookingCreated etc. do it if
+ * desired later).
+ *
+ * Actually sends both channels using the same dispatch() path as regular
+ * bookings, since recurringBooking has customer_phone/customer_email --
+ * this keeps behavior consistent with every other customer-facing
+ * notification in the app.
+ */
+function notifyRecurringConflict(recurringBooking, conflictDate) {
+  return dispatch(
+    recurringBooking,
+    (rb) => templates.recurringConflict(rb, conflictDate),
+    'recurring_conflict_customer'
+  );
+}
+
+/**
+ * Sends an EMAIL-ONLY alert to the admin's own inbox (EMAIL_USER), never
+ * to a customer. Used for both the weekly-conflict admin alert and the
+ * new-season-request admin alert.
+ *
+ * This intentionally bypasses dispatch() (which sends to booking.customer_*)
+ * and the SMS provider entirely -- admin alerts are internal/informational
+ * and the admin already gets a flood of customer SMS copies; email is
+ * preferred for this is to keep their phone from being spammed.
+ */
+async function dispatchAdminEmail(templateFn, args, triggerLabel) {
+  let content;
+  try {
+    content = templateFn(...args);
+  } catch (err) {
+    console.error(`[NotificationService] Failed to build admin alert template for "${triggerLabel}":`, err.message);
+    return;
+  }
+
+  const adminAddress = process.env.EMAIL_USER;
+  if (!adminAddress) {
+    console.warn(`[NotificationService] EMAIL_USER not configured, cannot send admin alert for "${triggerLabel}"`);
+    return;
+  }
+
+  try {
+    const result = await emailProvider.activeProvider.send({
+      to: adminAddress,
+      subject: content.emailSubject,
+      message: content.emailMessage
+    });
+    if (!result.success) {
+      console.error(`[NotificationService] Admin alert email failed for "${triggerLabel}":`, result.error);
+    }
+  } catch (err) {
+    console.error(`[NotificationService] Admin alert email threw for "${triggerLabel}":`, err.message);
+  }
+}
+
+/** Trigger: weekly generation job hit a conflict -- alert admin (email only). */
+function notifyRecurringConflictAdmin(recurringBooking, conflictDate) {
+  return dispatchAdminEmail(
+    templates.recurringConflictAdminAlert,
+    [recurringBooking, conflictDate],
+    'recurring_conflict_admin'
+  );
+}
+
+/** Trigger: customer submitted a new season booking request -- alert admin (email only). */
+function notifyRecurringRequestSubmittedAdmin(recurringBooking) {
+  return dispatchAdminEmail(
+    templates.recurringRequestSubmitted,
+    [recurringBooking],
+    'recurring_request_submitted_admin'
+  );
+}
+
 module.exports = {
   notifyBookingCreated,
   notifyBookingApproved,
   notifyBookingCancelled,
-  notifyPaymentReceived
+  notifyPaymentReceived,
+  notifyRecurringConflict,
+  notifyRecurringConflictAdmin,
+  notifyRecurringRequestSubmittedAdmin
 };

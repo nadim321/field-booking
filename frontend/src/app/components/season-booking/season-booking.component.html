@@ -1,0 +1,134 @@
+<div class="portal-container">
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="logo">
+      <span class="ball-icon">⚽</span>
+      <span class="logo-text">KICKOFF <span class="accent">ARENA</span></span>
+    </div>
+    <nav>
+      <a routerLink="/" class="btn btn-secondary admin-btn">Back to Booking</a>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="badge">📅 Standing Weekly Slot</span>
+      <h1>Book a Season Slot</h1>
+      <p>Lock in the same time every week for your team. Submit a request below and we'll confirm it within 1-2 days.
+      </p>
+    </div>
+  </section>
+
+  <main class="booking-section">
+
+    <!-- Success state -->
+    <div *ngIf="submitted" class="controls-card">
+      <div class="no-slots">
+        <p>✅ Your season booking request has been submitted and is <strong>pending admin approval</strong>.</p>
+        <p>We'll text and email you once it's approved, and again each week as your slot is reserved.</p>
+        <button class="btn btn-primary" (click)="resetForm()">Submit Another Request</button>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="controls-card" *ngIf="!submitted">
+      <div class="control-group">
+        <label for="startDate">Start Date <span class="req">*</span></label>
+        <div class="input-wrapper">
+          <input type="date" id="startDate" [(ngModel)]="startDate" (change)="onStartDateChange()"
+            class="form-control date-input" [min]="todayDate" />
+        </div>
+        <span class="form-err" *ngIf="startDate">Weekly day: <strong>{{ selectedDayName }}</strong> (every week on this
+          day until your end date)</span>
+      </div>
+
+      <div class="control-group" *ngIf="startDate">
+        <label for="endDate">End Date <span class="req">*</span></label>
+        <div class="input-wrapper">
+          <input type="date" id="endDate" [(ngModel)]="endDate" class="form-control date-input" [min]="startDate"
+            [max]="maxEndDate" />
+        </div>
+        <span class="form-err">Maximum {{ MAX_RANGE_MONTHS }} months from your start date ({{ maxEndDate }})</span>
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <div *ngIf="errorMsg" class="alert error-alert">
+      <span class="alert-icon">⚠️</span>
+      <p>{{ errorMsg }}</p>
+    </div>
+
+    <!-- Loading slots -->
+    <div *ngIf="loadingSlots" class="spinner-container">
+      <div class="spinner"></div>
+      <p>Loading available time slots...</p>
+    </div>
+
+    <!-- Slot picker -->
+    <div *ngIf="!submitted && !loadingSlots && startDate && slotOptions.length > 0" class="slots-container">
+      <div class="category-block">
+        <h3>🕐 Choose a weekly time ({{ selectedDayName }}s)</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of slotOptions" class="slot-card status-available"
+            [ngClass]="{ 'status-booked': selectedSlotId === slot.id }" (click)="selectedSlotId = slot.id">
+            <div class="time">{{ formatTimeRange(slot) }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ selectedSlotId === slot.id ? 'SELECTED' : 'AVAILABLE' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!submitted && !loadingSlots && startDate && slotOptions.length === 0" class="no-slots">
+      <p>No active slot templates found. Please contact us directly to arrange a season booking.</p>
+    </div>
+
+    <!-- Contact form -->
+    <div class="controls-card" *ngIf="!submitted && selectedSlotId">
+      <form (ngSubmit)="submitRequest()" #seasonForm="ngForm">
+        <div class="form-group">
+          <label for="custName">Customer / Team Contact Name <span class="req">*</span></label>
+          <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required
+            placeholder="Enter your name" />
+        </div>
+
+        <div class="form-group">
+          <label for="custPhone">Phone Number <span class="req">*</span></label>
+          <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" class="form-control" required
+            placeholder="017XXXXXXXX" />
+        </div>
+
+        <div class="form-group">
+          <label for="teamName">Team Name <span class="opt">(Optional)</span></label>
+          <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control"
+            placeholder="e.g. Dream Team FC" />
+        </div>
+
+        <div class="form-group">
+          <label for="custEmail">Email Address <span class="opt">(Optional)</span></label>
+          <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control"
+            placeholder="yourname@gmail.com" />
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary" [disabled]="!seasonForm.valid || submitting">
+            {{ submitting ? 'Submitting...' : 'Submit Season Booking Request' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2025 Gazipur Turf. All Rights Reserved. Located at Dhanmondi, Dhaka.</p>
+    <p>Contact: +88017XXXXXXXX | email: play&#64;gazipurturf.com</p>
+  </footer>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
+  <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
+  <span class="toast-text">{{ toastMsg }}</span>
+</div>

@@ -118,7 +118,8 @@ function initializePool() {
         start_time VARCHAR(10) NOT NULL,
         end_time VARCHAR(10) NOT NULL,
         price DECIMAL(10,2) NOT NULL,
-        is_active INT DEFAULT 1
+        is_active INT DEFAULT 1,
+        category INT NULL
       ) ENGINE=InnoDB
     `, [], (err) => {
       if (err) console.error("Error creating slots table:", err.message);
@@ -147,7 +148,39 @@ function initializePool() {
           return;
         }
 
+        // recurring_bookings holds the *template* for a season/recurring
+        // booking request. Individual weekly occurrences are generated
+        // into the `bookings` table by the scheduler in
+        // services/recurring/recurring-booking.scheduler.js -- this table
+        // itself never represents an actual reservation on its own.
+        //
+        // Status lifecycle:
+        //   pending_approval -> active -> (paused <-> active) -> cancelled
+        //                                                      -> expired
+        // 'expired' is set automatically by the scheduler once end_date
+        // has passed; all other transitions are admin actions.
         dbWrapper.run(`
+          CREATE TABLE IF NOT EXISTS recurring_bookings (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            slot_id INT NOT NULL,
+            day_of_week TINYINT NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            customer_name VARCHAR(255) NOT NULL,
+            customer_phone VARCHAR(50) NOT NULL,
+            customer_email VARCHAR(255),
+            team_name VARCHAR(255),
+            status VARCHAR(50) DEFAULT 'pending_approval',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+          ) ENGINE=InnoDB
+        `, [], (err) => {
+          if (err) {
+            console.error("Error creating recurring_bookings table:", err.message);
+            return;
+          }
+
+          dbWrapper.run(`
     CREATE TABLE IF NOT EXISTS bookings (
       id INT AUTO_INCREMENT PRIMARY KEY,
       slot_id INT NOT NULL,
@@ -158,20 +191,24 @@ function initializePool() {
       team_name VARCHAR(255),
       status VARCHAR(50) DEFAULT 'pending',
       payment_status VARCHAR(50) DEFAULT 'unpaid',
+      recurring_booking_id INT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
       CONSTRAINT uq_slot_date UNIQUE (slot_id, booking_date),
 
-      FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+      FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE,
+      FOREIGN KEY (recurring_booking_id) REFERENCES recurring_bookings(id) ON DELETE SET NULL
     ) ENGINE=InnoDB
   `, [], (err) => {
 
-          if (err) {
-            console.error("Error creating bookings table:", err.message);
-            return;
-          }
+            if (err) {
+              console.error("Error creating bookings table:", err.message);
+              return;
+            }
 
-          seedData();
+            seedData();
+          });
+
         });
 
       });
@@ -216,29 +253,43 @@ function seedData() {
     }
     const count = row ? (row.count || 0) : 0;
     if (count === 0) {
+      // Category values: 1=Morning, 2=Afternoon, 3=Evening, 4=Night, 5=Midnight
+      // (see constants/slot-categories.js for the canonical mapping used
+      // everywhere else in the app). Assigned here using the boundaries
+      // the business defined: Morning 6am-12pm, Afternoon 12pm-4pm,
+      // Evening 4pm-7pm, Night 7pm-12am, Midnight 12am-6am. This is a
+      // one-time convenience for fresh installs only -- categories on
+      // slots added later via the admin panel are always chosen manually.
       const defaultSlots = [
-        { start: '06:00', end: '07:00', price: 1000 },
-        { start: '07:00', end: '08:00', price: 1000 },
-        { start: '08:00', end: '09:00', price: 1000 },
-        { start: '09:00', end: '10:00', price: 1000 },
-        { start: '10:00', end: '11:00', price: 1000 },
-        { start: '11:00', end: '12:00', price: 1000 },
-        { start: '12:00', end: '13:00', price: 1200 },
-        { start: '13:00', end: '14:00', price: 1200 },
-        { start: '14:00', end: '15:00', price: 1200 },
-        { start: '15:00', end: '16:00', price: 1200 },
-        { start: '16:00', end: '17:00', price: 1500 },
-        { start: '17:00', end: '18:00', price: 1500 },
-        { start: '18:00', end: '19:00', price: 1800 },
-        { start: '19:00', end: '20:00', price: 1800 },
-        { start: '20:00', end: '21:00', price: 1800 },
-        { start: '21:00', end: '22:00', price: 1500 },
-        { start: '22:00', end: '23:00', price: 1200 }
+        { start: '00:00', end: '01:00', price: 1000, category: 5 },
+        { start: '01:00', end: '02:00', price: 1000, category: 5 },
+        { start: '02:00', end: '03:00', price: 1000, category: 5 },
+        { start: '03:00', end: '04:00', price: 1000, category: 5 },
+        { start: '04:00', end: '05:00', price: 1000, category: 5 },
+        { start: '05:00', end: '06:00', price: 1000, category: 5 },
+        { start: '06:00', end: '07:00', price: 1000, category: 1 },
+        { start: '07:00', end: '08:00', price: 1000, category: 1 },
+        { start: '08:00', end: '09:00', price: 1000, category: 1 },
+        { start: '09:00', end: '10:00', price: 1000, category: 1 },
+        { start: '10:00', end: '11:00', price: 1000, category: 1 },
+        { start: '11:00', end: '12:00', price: 1000, category: 1 },
+        { start: '12:00', end: '13:00', price: 1200, category: 2 },
+        { start: '13:00', end: '14:00', price: 1200, category: 2 },
+        { start: '14:00', end: '15:00', price: 1200, category: 2 },
+        { start: '15:00', end: '16:00', price: 1200, category: 2 },
+        { start: '16:00', end: '17:00', price: 1500, category: 3 },
+        { start: '17:00', end: '18:00', price: 1500, category: 3 },
+        { start: '18:00', end: '19:00', price: 1800, category: 3 },
+        { start: '19:00', end: '20:00', price: 1800, category: 4 },
+        { start: '20:00', end: '21:00', price: 1800, category: 4 },
+        { start: '21:00', end: '22:00', price: 1500, category: 4 },
+        { start: '22:00', end: '23:00', price: 1200, category: 4 },
+        { start: '23:00', end: '00:00', price: 1000, category: 4 }
       ];
 
-      const stmt = dbWrapper.prepare("INSERT INTO slots (start_time, end_time, price, is_active) VALUES (?, ?, ?, 1)");
+      const stmt = dbWrapper.prepare("INSERT INTO slots (start_time, end_time, price, is_active, category) VALUES (?, ?, ?, 1, ?)");
       defaultSlots.forEach(slot => {
-        stmt.run(slot.start, slot.end, slot.price);
+        stmt.run(slot.start, slot.end, slot.price, slot.category);
       });
       stmt.finalize((err) => {
         if (err) {

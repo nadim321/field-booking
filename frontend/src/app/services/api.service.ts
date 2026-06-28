@@ -119,6 +119,26 @@ export class ApiService {
     });
   }
 
+  // --- Season / Recurring Booking (Customer self-serve) ---
+
+  /**
+   * Submits a self-serve season booking request. day_of_week is derived
+   * server-side from start_date -- not sent from the client. Returns the
+   * created template with status 'pending_approval'; no slots are
+   * reserved until an admin approves it.
+   */
+  createRecurringBooking(data: {
+    slot_id: number;
+    start_date: string;
+    end_date: string;
+    customer_name: string;
+    customer_phone: string;
+    customer_email?: string;
+    team_name?: string;
+  }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/recurring-bookings`, data);
+  }
+
   // --- Admin Dashboard Methods ---
   getAdminBookings(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/admin/bookings`, {
@@ -153,6 +173,7 @@ export class ApiService {
     end_time: string;
     price: number;
     is_active: number;
+    category?: number | null;
   }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/admin/slots`, slotData, {
       headers: this.getAuthHeaders()
@@ -164,6 +185,8 @@ export class ApiService {
     end_time?: string;
     price?: number;
     is_active?: number;
+    category?: number | null;
+    category_clear?: boolean;
   }): Observable<any> {
     return this.http.put<any>(`${this.apiUrl}/admin/slots/${slotId}`, slotData, {
       headers: this.getAuthHeaders()
@@ -178,6 +201,38 @@ export class ApiService {
 
   getAdminStats(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/admin/stats`, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  // --- Admin: Recurring / Season Booking Management ---
+
+  /** Lists recurring booking templates. Pass a status to filter (e.g. the approval inbox). */
+  getAdminRecurringBookings(status?: string): Observable<any[]> {
+    const url = status
+      ? `${this.apiUrl}/admin/recurring-bookings?status=${encodeURIComponent(status)}`
+      : `${this.apiUrl}/admin/recurring-bookings`;
+    return this.http.get<any[]>(url, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  /** Approves, pauses, resumes, or cancels a template; or extends its end_date. */
+  updateRecurringBooking(id: number, data: { status?: string; end_date?: string }): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/admin/recurring-bookings/${id}`, data, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  deleteRecurringBooking(id: number): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/admin/recurring-bookings/${id}`, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  /** Manually triggers one generation pass immediately (debugging/testing aid). */
+  runRecurringBookingGenerationNow(): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/admin/recurring-bookings/run-now`, {}, {
       headers: this.getAuthHeaders()
     });
   }

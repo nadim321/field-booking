@@ -1,4 +1,8 @@
-/* Core Layout Styles for Booking Portal */
+/* Styles copied from booking-portal.component.css and adapted for this
+   component's own :host, since Angular scopes :host styles per-component
+   -- they don't carry over just by reusing the same class names in a
+   different component's template. */
+
 :host {
   display: block;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -178,10 +182,6 @@
   background-color: #f97316;
 }
 
-.dot.season-reserved {
-  background-color: #a855f7;
-}
-
 .dot.pending {
   background-color: #f59e0b;
 }
@@ -243,12 +243,6 @@
   filter: grayscale(0.4);
 }
 
-.slot-card.status-season-reserved {
-  border-left: 4px solid #a855f7;
-  cursor: not-allowed;
-  opacity: 0.75;
-}
-
 .slot-card.status-pending {
   border-left: 4px solid #f59e0b;
   cursor: not-allowed;
@@ -290,11 +284,6 @@
 .status-held .status-badge {
   background-color: rgba(249, 115, 22, 0.15);
   color: #fb923c;
-}
-
-.status-season-reserved .status-badge {
-  background-color: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
 }
 
 .status-pending .status-badge {
@@ -460,30 +449,6 @@
 
 .summary-item .val.highlight {
   color: #10b981;
-}
-
-/* Hold countdown banner (hold/confirm flow) */
-.hold-timer {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background-color: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  margin-bottom: 1.2rem;
-}
-
-.hold-timer-icon {
-  font-size: 1.1rem;
-}
-
-.hold-timer-warning {
-  background-color: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #f87171;
 }
 
 /* Forms Styling */
@@ -686,6 +651,10 @@
   border-radius: 12px;
   border: 1px dashed rgba(255, 255, 255, 0.1);
   color: #94a3b8;
+}
+
+.no-slots p {
+  margin: 0 0 1rem 0;
 }
 
 /* Footer styling */

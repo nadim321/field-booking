@@ -6,6 +6,7 @@
       <span class="logo-text">KICKOFF <span class="accent">ARENA</span></span>
     </div>
     <nav>
+      <a routerLink="/season-booking" class="btn btn-secondary">📅 Season Booking</a>
       <a routerLink="/admin/login" class="btn btn-secondary admin-btn">Admin Panel</a>
     </nav>
   </header>
@@ -33,6 +34,7 @@
       <div class="legend">
         <span class="legend-item"><span class="dot available"></span> Available</span>
         <span class="legend-item"><span class="dot held"></span> Held</span>
+        <span class="legend-item"><span class="dot season-reserved"></span> Season Booking</span>
         <span class="legend-item"><span class="dot pending"></span> Pending Approval</span>
         <span class="legend-item"><span class="dot booked"></span> Booked / Occupied</span>
       </div>
@@ -54,70 +56,111 @@
     <!-- Slots Grid Container -->
     <div *ngIf="!loading && !errorMsg" class="slots-container">
 
-      <!-- Morning Slots -->
-      <div class="category-block" *ngIf="getSlotsByCategory('morning').length > 0">
-        <h3>🌅 Morning slots (06:00 AM - 12:00 PM)</h3>
+      <!-- Morning Slots (category 1) -->
+      <div class="category-block" *ngIf="getSlotsByCategory(1).length > 0">
+        <h3>🌅 Morning slots</h3>
         <div class="slots-grid">
-          <div *ngFor="let slot of getSlotsByCategory('morning')" class="slot-card" [ngClass]="{
+          <div *ngFor="let slot of getSlotsByCategory(1)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
               'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
             }" (click)="onSlotClick(slot)">
-            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
-            <div class="status-badge">{{ slot.status | uppercase }}</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
       </div>
 
-      <!-- Afternoon Slots -->
-      <div class="category-block" *ngIf="getSlotsByCategory('afternoon').length > 0">
-        <h3>☀️ Afternoon slots (12:00 PM - 04:00 PM)</h3>
+      <!-- Afternoon Slots (category 2) -->
+      <div class="category-block" *ngIf="getSlotsByCategory(2).length > 0">
+        <h3>☀️ Afternoon slots</h3>
         <div class="slots-grid">
-          <div *ngFor="let slot of getSlotsByCategory('afternoon')" class="slot-card" [ngClass]="{
+          <div *ngFor="let slot of getSlotsByCategory(2)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
               'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
             }" (click)="onSlotClick(slot)">
-            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
-            <div class="status-badge">{{ slot.status | uppercase }}</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
       </div>
 
-      <!-- Evening Slots -->
-      <div class="category-block" *ngIf="getSlotsByCategory('evening').length > 0">
-        <h3>🌇 Evening Peak slots (04:00 PM - 06:00 PM)</h3>
+      <!-- Evening Slots (category 3) -->
+      <div class="category-block" *ngIf="getSlotsByCategory(3).length > 0">
+        <h3>🌇 Evening slots</h3>
         <div class="slots-grid">
-          <div *ngFor="let slot of getSlotsByCategory('evening')" class="slot-card" [ngClass]="{
+          <div *ngFor="let slot of getSlotsByCategory(3)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
               'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
             }" (click)="onSlotClick(slot)">
-            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
-            <div class="status-badge">{{ slot.status | uppercase }}</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
       </div>
 
-      <!-- Night Slots -->
-      <div class="category-block" *ngIf="getSlotsByCategory('night').length > 0">
-        <h3>🌃 Under-Lights Night slots (06:00 PM - 11:00 PM)</h3>
+      <!-- Night Slots (category 4) -->
+      <div class="category-block" *ngIf="getSlotsByCategory(4).length > 0">
+        <h3>🌃 Under-Lights Night slots</h3>
         <div class="slots-grid">
-          <div *ngFor="let slot of getSlotsByCategory('night')" class="slot-card" [ngClass]="{
+          <div *ngFor="let slot of getSlotsByCategory(4)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
               'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved'
             }" (click)="onSlotClick(slot)">
-            <div class="time">{{ slot.start_time }} - {{ slot.end_time }}</div>
+            <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
-            <div class="status-badge">{{ slot.status | uppercase }}</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Midnight Slots (category 5) -->
+      <div class="category-block" *ngIf="getSlotsByCategory(5).length > 0">
+        <h3>🌙 Midnight slots</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getSlotsByCategory(5)" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="onSlotClick(slot)">
+            <div class="time">{{ formatTimeRange(slot) }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Other / uncategorized slots -- shown so nothing silently
+           disappears while waiting for an admin to assign a category -->
+      <div class="category-block" *ngIf="getUncategorizedSlots().length > 0">
+        <h3>📋 Other slots</h3>
+        <div class="slots-grid">
+          <div *ngFor="let slot of getUncategorizedSlots()" class="slot-card" [ngClass]="{
+              'status-available': slot.status === 'available',
+              'status-held': slot.status === 'held',
+              'status-season-reserved': slot.status === 'season_reserved',
+              'status-pending': slot.status === 'pending',
+              'status-booked': slot.status === 'approved'
+            }" (click)="onSlotClick(slot)">
+            <div class="time">{{ formatTimeRange(slot) }}</div>
+            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
       </div>
@@ -152,7 +195,7 @@
         </div>
         <div class="summary-item">
           <span class="label">Time Slot:</span>
-          <span class="val highlight">{{ selectedSlot?.start_time }} - {{ selectedSlot?.end_time }}</span>
+          <span class="val highlight">{{ formatTimeRange(selectedSlot) }}</span>
         </div>
         <div class="summary-item">
           <span class="label">Price:</span>
