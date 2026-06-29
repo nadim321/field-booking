@@ -80,6 +80,53 @@ function paymentReceived(booking) {
 }
 
 /**
+ * Sent when a verified advance payment automatically confirms a booking
+ * (the real SSLCommerz flow -- distinct from the legacy paymentReceived
+ * template above, which was written for the old mock-payment flow and is
+ * kept only for backward compatibility).
+ */
+function advancePaymentConfirmed(booking) {
+  const slotLine = formatSlotLine(booking);
+  const balanceDue = booking.price && booking.amount_paid
+    ? (parseFloat(booking.price) - parseFloat(booking.amount_paid))
+    : null;
+  const balanceLine = balanceDue && balanceDue > 0
+    ? ` Remaining balance of BDT ${balanceDue.toFixed(2)} is due at the turf.`
+    : '';
+  return {
+    smsMessage: `Hi ${booking.customer_name}, your advance payment was received and your turf booking for ${slotLine} is CONFIRMED.${balanceLine} - Kickoff Arena`,
+    emailSubject: 'Booking Confirmed - Advance Payment Received - Kickoff Arena',
+    emailMessage:
+      `Hi ${booking.customer_name},\n\n` +
+      `We've received your advance payment and your turf booking for ${slotLine} is now CONFIRMED.\n` +
+      `Booking ID: ${booking.id || booking.booking_id}\n` +
+      `Amount paid: BDT ${booking.amount_paid}\n` +
+      (balanceDue && balanceDue > 0 ? `Remaining balance (due at the turf): BDT ${balanceDue.toFixed(2)}\n` : '') +
+      `\nSee you on the pitch!\n\n` +
+      `- Kickoff Arena`
+  };
+}
+
+/**
+ * Sent when a payment attempt failed or was cancelled (the booking stays
+ * pending; this just keeps the customer informed of what happened).
+ */
+function paymentFailed(booking, reason) {
+  const slotLine = formatSlotLine(booking);
+  return {
+    smsMessage: `Hi ${booking.customer_name}, your payment attempt for the turf booking on ${slotLine} was ${reason}. Your booking is still pending -- please try again or contact us. - Kickoff Arena`,
+    emailSubject: 'Payment Not Completed - Kickoff Arena',
+    emailMessage:
+      `Hi ${booking.customer_name},\n\n` +
+      `Your payment attempt for the turf booking on ${slotLine} was ${reason}.\n` +
+      `Booking ID: ${booking.id || booking.booking_id}\n` +
+      `Your booking is still pending -- please try the payment again, or contact us if you'd like to arrange payment another way.\n\n` +
+      `- Kickoff Arena`
+  };
+}
+
+
+/**
  * Sent to the SEASON CUSTOMER when the weekly generation job could not
  * create their booking for a particular week because a one-off booking
  * already took that slot/date first.
@@ -153,6 +200,8 @@ module.exports = {
   bookingApproved,
   bookingCancelled,
   paymentReceived,
+  advancePaymentConfirmed,
+  paymentFailed,
   recurringConflict,
   recurringConflictAdminAlert,
   recurringRequestSubmitted

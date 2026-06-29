@@ -65,6 +65,13 @@ export class ApiService {
     return this.http.get<any>(`${`${this.apiUrl}/slots/available`}?date=${date}`);
   }
 
+  /** Fetches a non-personal summary of a booking for the post-payment
+   * result page (date, time, price, payment status -- no customer PII,
+   * since booking IDs are guessable). */
+  getBookingResult(bookingId: number): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/${bookingId}/result`);
+  }
+
   // Legacy direct-booking endpoint. Retained for admin/legacy usage; the
   // customer booking portal now uses holdSlot() + confirmBooking() instead.
   createBooking(bookingData: {
@@ -112,10 +119,15 @@ export class ApiService {
     return this.http.post<any>(`${this.apiUrl}/slots/confirm`, bookingData);
   }
 
-  initiatePayment(bookingId: number, paymentMethod: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/payments/checkout`, {
-      booking_id: bookingId,
-      payment_method: paymentMethod
+  /**
+   * Starts a real SSLCommerz payment session for a booking's advance
+   * amount. Returns { tran_id, amount, required_advance, gateway_page_url }.
+   * The caller is responsible for redirecting window.location to
+   * gateway_page_url once the customer confirms they want to pay.
+   */
+  initiatePayment(bookingId: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/payments/initiate`, {
+      booking_id: bookingId
     });
   }
 
@@ -233,6 +245,20 @@ export class ApiService {
   /** Manually triggers one generation pass immediately (debugging/testing aid). */
   runRecurringBookingGenerationNow(): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/admin/recurring-bookings/run-now`, {}, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  // --- Admin: App Settings ---
+
+  getSettings(): Observable<{ advance_payment_percentage: number }> {
+    return this.http.get<{ advance_payment_percentage: number }>(`${this.apiUrl}/admin/settings`, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  updateSettings(data: { advance_payment_percentage: number }): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/admin/settings`, data, {
       headers: this.getAuthHeaders()
     });
   }

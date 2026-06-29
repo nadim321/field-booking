@@ -14,6 +14,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.9.7",
-    "nodemailer": "^9.0.1"
+    "nodemailer": "^9.0.1",
+    "sslcommerz-lts": "^1.2.0"
   }
 }

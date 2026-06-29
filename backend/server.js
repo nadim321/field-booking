@@ -12,6 +12,8 @@ const authenticateAdmin = require('./middleware/auth');
 const notificationService = require('./services/notifications/notification.service');
 const recurringScheduler = require('./services/recurring/recurring-booking.scheduler');
 const { isValidCategory, categoryLabel } = require('./constants/slot-categories');
+const sslcommerzProvider = require('./services/payments/sslcommerz.provider');
+const settingsService = require('./services/settings.service');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -89,7 +91,46 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// 2. Get Available Slots for a Specific Date
+// 2. Get a single booking's result summary for the post-payment page.
+// Deliberately returns ONLY non-personal fields -- booking_id is a
+// guessable sequential integer, so this must never leak customer name,
+// phone, or email to anyone who happens to know/guess an ID.
+app.get('/api/bookings/:id/result', (req, res) => {
+  const { id } = req.params;
+
+  db.get(
+    `SELECT b.id, b.booking_date, b.status, b.payment_status, b.amount_paid,
+            s.start_time, s.end_time, s.price
+     FROM bookings b
+     JOIN slots s ON b.slot_id = s.id
+     WHERE b.id = ?`,
+    [id],
+    (err, booking) => {
+      if (err) {
+        return res.status(500).json({ message: 'Database error', error: err.message });
+      }
+      if (!booking) {
+        return res.status(404).json({ message: 'Booking not found' });
+      }
+
+      const balanceDue = Math.max(parseFloat(booking.price) - parseFloat(booking.amount_paid || 0), 0);
+
+      res.json({
+        booking_id: booking.id,
+        booking_date: booking.booking_date,
+        start_time: booking.start_time,
+        end_time: booking.end_time,
+        price: booking.price,
+        amount_paid: booking.amount_paid,
+        balance_due: Math.round(balanceDue * 100) / 100,
+        status: booking.status,
+        payment_status: booking.payment_status
+      });
+    }
+  );
+});
+
+// 3. Get Available Slots for a Specific Date
 app.get('/api/slots/available', (req, res) => {
   const { date } = req.query;
 
@@ -213,10 +254,10 @@ app.get('/api/slots/available', (req, res) => {
   });
 });
 
-// 3. Request a Booking (Customer Facing)
+// 4. Request a Booking (Customer Facing)
 // NOTE: Existing direct booking endpoint retained for admin/legacy usage. New flow uses hold + confirm.
 
-// 3a. Create a temporary hold when booking form is opened
+// 4a. Create a temporary hold when booking form is opened
 app.post('/api/slots/hold', (req, res) => {
   const { slot_id, booking_date } = req.body;
   if (!slot_id || !booking_date) {
@@ -288,7 +329,7 @@ app.post('/api/slots/hold', (req, res) => {
   });
 });
 
-// 3b. Cancel a hold immediately (user clicked Cancel / closed the modal)
+// 4b. Cancel a hold immediately (user clicked Cancel / closed the modal)
 app.delete('/api/slots/hold', (req, res) => {
   const { slot_id, booking_date, session_token } = req.body;
   if (!session_token) {
@@ -323,7 +364,7 @@ app.delete('/api/slots/hold', (req, res) => {
   );
 });
 
-// 3c. Confirm booking using a valid hold
+// 4c. Confirm booking using a valid hold
 app.post('/api/slots/confirm', (req, res) => {
   const { slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, session_token } = req.body;
   if (!slot_id || !booking_date || !customer_name || !customer_phone || !session_token) {
@@ -499,7 +540,7 @@ app.post('/api/bookings', (req, res) => {
   });
 });
 
-// 4. Request a Season/Recurring Booking (Customer Facing, self-serve)
+// 5. Request a Season/Recurring Booking (Customer Facing, self-serve)
 // Creates a `recurring_bookings` TEMPLATE only -- no individual `bookings`
 // rows are generated until an admin approves it (status: pending_approval
 // -> active). The weekly generation job (services/recurring/recurring-booking.scheduler.js)
@@ -986,94 +1027,383 @@ app.get('/api/admin/stats', authenticateAdmin, (req, res) => {
 });
 
 
-// --- FUTURE PAYMENT GATEWAY INTEGRATION PLACEHOLDER ---
-// Under normal circumstances, this endpoint would trigger checkout page for Bkash/SSLCommerz/Stripe
-app.post('/api/payments/checkout', (req, res) => {
-  const { booking_id, payment_method } = req.body;
+// --- PAYMENT GATEWAY INTEGRATION (SSLCommerz) ---
+//
+// Flow:
+//   1. POST /api/payments/initiate -- customer (or frontend on their
+//      behalf) requests to pay the advance for a booking. We compute the
+//      required advance amount from app_settings, create a
+//      payment_transactions row, ask SSLCommerz for a GatewayPageURL,
+//      and return it so the frontend can redirect the browser there.
+//   2. Customer pays on SSLCommerz's hosted page.
+//   3a. SSLCommerz POSTs to /api/payments/ipn (server-to-server) -- this
+//       is the AUTHORITATIVE confirmation path. We verify the signature,
+//       then call the Order Validation API, then update our DB. This
+//       fires even if the customer's browser never makes it back to us.
+//   3b. SSLCommerz redirects the browser to /api/payments/success,
+//       /fail, or /cancel -- these are for UX only. /success also
+//       independently re-validates (in case IPN is delayed/missed in the
+//       sandbox), but never trusts redirect query params on their own.
+//
+// Per the booking decision made earlier: a verified advance payment
+// (amount_paid >= required advance) automatically sets
+// bookings.status = 'approved' -- no separate admin approval step.
 
-  if (!booking_id || !payment_method) {
-    return res.status(400).json({ message: 'Required fields: booking_id, payment_method' });
+const PAYMENT_PUBLIC_BASE_URL = process.env.PAYMENT_PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+
+/** Computes the required advance amount (in BDT) for a given slot price. */
+async function computeRequiredAdvance(slotPrice) {
+  const percentage = await settingsService.getAdvancePaymentPercentage();
+  return Math.round((parseFloat(slotPrice) * percentage / 100) * 100) / 100; // round to 2 decimals
+}
+
+/** Promise wrappers for the handful of db calls used in this section,
+ * for cleaner async/await flow without restructuring the rest of the
+ * (callback-style) file. */
+function dbGetAsync(sql, params) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+}
+function dbRunAsync(sql, params) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve({ lastID: this.lastID, changes: this.changes });
+    });
+  });
+}
+
+// 1. Initiate a payment session for a booking's advance amount.
+app.post('/api/payments/initiate', async (req, res) => {
+  const { booking_id } = req.body;
+  if (!booking_id) {
+    return res.status(400).json({ message: 'booking_id is required' });
   }
 
-  // 1. Fetch booking details to get the amount
-  db.get(
-    `SELECT b.*, s.price 
-     FROM bookings b 
-     JOIN slots s ON b.slot_id = s.id 
-     WHERE b.id = ?`,
-    [booking_id],
-    (err, booking) => {
-      if (err) {
-        return res.status(500).json({ message: 'Database error', error: err.message });
-      }
-      if (!booking) {
-        return res.status(404).json({ message: 'Booking not found' });
-      }
+  try {
+    const booking = await dbGetAsync(
+      `SELECT b.*, s.price, s.start_time, s.end_time
+       FROM bookings b
+       JOIN slots s ON b.slot_id = s.id
+       WHERE b.id = ?`,
+      [booking_id]
+    );
 
-      // Mock Transaction
-      const mockTransactionId = 'TRX_MOCK_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ message: 'This booking has been cancelled' });
+    }
+    if (booking.payment_status === 'paid') {
+      return res.status(400).json({ message: 'This booking is already fully paid' });
+    }
 
-      // If SSLCommerz/Bkash/Stripe is integrated, you would make an API call to their server here
-      // and send back a redirect URL (checkout URL) to the frontend.
-      // For now, we mock the success response.
-      res.json({
-        message: 'Payment checkout initiated (MOCK)',
-        booking_id: booking.id,
-        amount: booking.price,
-        payment_method,
-        transaction_id: mockTransactionId,
-        checkout_url: `http://localhost:${PORT}/api/payments/mock-redirect?trx_id=${mockTransactionId}&booking_id=${booking.id}`
+    const requiredAdvance = await computeRequiredAdvance(booking.price);
+    // Amount still owed to reach the advance threshold -- if the customer
+    // already partially paid (e.g. a prior failed/retried attempt left a
+    // smaller amount_paid), only charge the remaining gap, not the full
+    // advance again.
+    const amountDue = Math.max(requiredAdvance - parseFloat(booking.amount_paid || 0), 0);
+    if (amountDue <= 0) {
+      return res.status(400).json({ message: 'The required advance has already been paid for this booking' });
+    }
+    // SSLCommerz's documented minimum transaction amount is 10.00 BDT.
+    if (amountDue < 10) {
+      return res.status(400).json({ message: 'Remaining payable amount is below the minimum allowed by the payment gateway (10 BDT)' });
+    }
+
+    const tranId = sslcommerzProvider.generateTranId(booking.id);
+
+    await dbRunAsync(
+      `INSERT INTO payment_transactions (booking_id, tran_id, amount, currency, status)
+       VALUES (?, ?, ?, 'BDT', 'initiated')`,
+      [booking.id, tranId, amountDue]
+    );
+
+    const sslczResponse = await sslcommerzProvider.initiateSession({
+      tran_id: tranId,
+      amount: amountDue,
+      booking_id: booking.id,
+      customer_name: booking.customer_name,
+      customer_phone: booking.customer_phone,
+      customer_email: booking.customer_email,
+      product_name: `Turf Booking Advance - ${booking.booking_date} (${booking.start_time}-${booking.end_time})`,
+      success_url: `${PAYMENT_PUBLIC_BASE_URL}/api/payments/success`,
+      fail_url: `${PAYMENT_PUBLIC_BASE_URL}/api/payments/fail`,
+      cancel_url: `${PAYMENT_PUBLIC_BASE_URL}/api/payments/cancel`,
+      ipn_url: `${PAYMENT_PUBLIC_BASE_URL}/api/payments/ipn`
+    });
+
+    if (sslczResponse.status !== 'SUCCESS' || !sslczResponse.GatewayPageURL) {
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ?`, [tranId]);
+      return res.status(502).json({
+        message: 'Failed to initiate payment session with the payment gateway',
+        gateway_reason: sslczResponse.failedreason || 'Unknown error'
       });
     }
-  );
+
+    res.json({
+      message: 'Payment session created',
+      tran_id: tranId,
+      amount: amountDue,
+      required_advance: requiredAdvance,
+      gateway_page_url: sslczResponse.GatewayPageURL
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to initiate payment', error: err.message });
+  }
 });
 
-// Mock redirect endpoint that simulates payment processor approval redirection
-app.get('/api/payments/mock-redirect', (req, res) => {
-  const { trx_id, booking_id } = req.query;
+/**
+ * Shared logic for confirming a payment once we have a val_id, used by
+ * both the IPN handler and the /success redirect fallback. Idempotent --
+ * calling this more than once for the same val_id/tran_id is safe (the
+ * payment_transactions row's status is just re-set to the same value,
+ * and bookings.amount_paid is only ever incremented once per tran_id by
+ * checking the transaction's current status before applying the update).
+ */
+async function confirmPaymentByValId(valId, sourceLabel) {
+  const validation = await sslcommerzProvider.validateTransaction(valId);
 
-  if (!booking_id) {
-    return res.send('<h1>Error: Missing booking details</h1>');
+  if (!validation || !validation.tran_id) {
+    return { ok: false, reason: 'Validation API returned no transaction data' };
   }
 
-  // Update booking as approved and paid
-  db.run(
-    "UPDATE bookings SET status = 'approved', payment_status = 'paid' WHERE id = ?",
-    [booking_id],
-    (err) => {
-      if (err) {
-        return res.status(500).send('<h1>Database error during payment verification</h1>');
-      }
+  const transaction = await dbGetAsync(
+    `SELECT * FROM payment_transactions WHERE tran_id = ?`,
+    [validation.tran_id]
+  );
+  if (!transaction) {
+    return { ok: false, reason: `No local transaction found for tran_id ${validation.tran_id}` };
+  }
 
-      // Fetch full booking + slot details for the notification (the
-      // UPDATE above only returns affected-row info, not the row itself).
-      db.get(
-        `SELECT b.*, s.start_time, s.end_time, s.price
-         FROM bookings b
-         JOIN slots s ON b.slot_id = s.id
-         WHERE b.id = ?`,
-        [booking_id],
-        (fetchErr, fullBooking) => {
-          if (!fetchErr && fullBooking) {
-            notificationService.notifyPaymentReceived(fullBooking);
-          }
+  // Security checkpoint per SSLCommerz docs: validate amount against our
+  // own records, not just trust whatever the gateway response claims.
+  const expectedAmount = parseFloat(transaction.amount);
+  const actualAmount = parseFloat(validation.amount);
+  if (Math.abs(expectedAmount - actualAmount) > 0.01) {
+    await dbRunAsync(
+      `UPDATE payment_transactions SET status = 'failed', val_id = ? WHERE tran_id = ?`,
+      [valId, validation.tran_id]
+    );
+    return { ok: false, reason: `Amount mismatch: expected ${expectedAmount}, got ${actualAmount}` };
+  }
 
-          // In a real app, this redirects back to the Angular frontend success page
-          res.send(`
-            <div style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px; padding: 20px;">
-              <h1 style="color: #047857;">⚽ Payment Successful!</h1>
-              <p style="font-size: 18px; color: #4b5563;">Your payment has been successfully processed.</p>
-              <p><strong>Booking ID:</strong> ${booking_id}</p>
-              <p><strong>Transaction ID:</strong> ${trx_id}</p>
-              <p style="margin-top: 30px;">
-                <a href="http://localhost:4200/" style="background-color: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Return to Turf Site</a>
-              </p>
-            </div>
-          `);
-        }
+  const isValid = validation.status === 'VALID' || validation.status === 'VALIDATED';
+
+  // Already processed (e.g. IPN already confirmed this before the
+  // /success redirect fallback also tried) -- nothing further to do, but
+  // not an error either.
+  if (transaction.status === 'valid' && isValid) {
+    return { ok: true, alreadyProcessed: true, bookingId: transaction.booking_id };
+  }
+
+  await dbRunAsync(
+    `UPDATE payment_transactions
+     SET status = ?, val_id = ?, card_type = ?, bank_tran_id = ?
+     WHERE tran_id = ?`,
+    [isValid ? 'valid' : 'failed', valId, validation.card_type || null, validation.bank_tran_id || null, validation.tran_id]
+  );
+
+  if (!isValid) {
+    return { ok: false, reason: `Transaction status from gateway: ${validation.status}` };
+  }
+
+  // Apply the payment to the booking: bump amount_paid, set payment_status,
+  // and auto-approve if the advance threshold is now met.
+  const booking = await dbGetAsync(
+    `SELECT b.*, s.price, s.start_time, s.end_time
+     FROM bookings b
+     JOIN slots s ON b.slot_id = s.id
+     WHERE b.id = ?`,
+    [transaction.booking_id]
+  );
+  if (!booking) {
+    return { ok: false, reason: `Booking ${transaction.booking_id} not found` };
+  }
+
+  const newAmountPaid = parseFloat(booking.amount_paid || 0) + actualAmount;
+  const requiredAdvance = await computeRequiredAdvance(booking.price);
+  const meetsAdvanceThreshold = newAmountPaid >= requiredAdvance - 0.01; // small float tolerance
+  const newPaymentStatus = newAmountPaid >= parseFloat(booking.price) - 0.01
+    ? 'paid'
+    : 'partially_paid';
+
+  await dbRunAsync(
+    `UPDATE bookings
+     SET amount_paid = ?,
+         payment_status = ?,
+         payment_method = 'sslcommerz',
+         transaction_id = ?,
+         status = ${meetsAdvanceThreshold ? "'approved'" : 'status'}
+     WHERE id = ?`,
+    [newAmountPaid, newPaymentStatus, validation.tran_id, booking.id]
+  );
+
+  if (meetsAdvanceThreshold && booking.status !== 'approved') {
+    notificationService.notifyAdvancePaymentConfirmed({
+      ...booking,
+      amount_paid: newAmountPaid
+    });
+  }
+
+  return { ok: true, bookingId: booking.id, autoApproved: meetsAdvanceThreshold };
+}
+
+// 2. IPN listener -- the AUTHORITATIVE server-to-server confirmation path.
+// Must respond 200 regardless of outcome (per SSLCommerz docs, the body
+// content doesn't matter, but a non-200 may cause retries) -- failures
+// are logged, not thrown back as HTTP errors, since there's no browser
+// on the other end of this request to show an error to.
+app.post('/api/payments/ipn', express.urlencoded({ extended: true }), async (req, res) => {
+  const body = req.body;
+
+  // Fast local check first: reject obviously forged/corrupted payloads
+  // without even calling out to SSLCommerz.
+  if (!sslcommerzProvider.verifyIpnSignature(body)) {
+    console.error('[Payments] IPN signature verification failed -- possible forged request', { tran_id: body.tran_id });
+    return res.status(200).send('Signature verification failed');
+  }
+
+  if (!body.val_id) {
+    console.error('[Payments] IPN payload missing val_id', { tran_id: body.tran_id });
+    return res.status(200).send('Missing val_id');
+  }
+
+  try {
+    // Persist the raw payload for audit/debugging regardless of outcome.
+    if (body.tran_id) {
+      await dbRunAsync(
+        `UPDATE payment_transactions SET raw_ipn_payload = ? WHERE tran_id = ?`,
+        [JSON.stringify(body), body.tran_id]
       );
     }
-  );
+
+    const result = await confirmPaymentByValId(body.val_id, 'ipn');
+    if (!result.ok) {
+      console.error('[Payments] IPN confirmation failed:', result.reason);
+    } else {
+      console.log(`[Payments] IPN confirmed payment for booking ${result.bookingId} (autoApproved=${!!result.autoApproved})`);
+    }
+  } catch (err) {
+    console.error('[Payments] IPN handler threw:', err.message);
+  }
+
+  res.status(200).send('OK');
+});
+
+// 3. Browser redirect targets. UX only -- SSLCommerz documents these as
+// untrustworthy on their own (the customer's browser, not SSLCommerz's
+// server, is what's hitting these). /success independently re-validates
+// as a fallback in case IPN delivery is delayed (common in sandbox), but
+// always through the same authoritative confirmPaymentByValId() path --
+// never by trusting query params directly.
+//
+// IMPORTANT: SSLCommerz calls success_url via POST (like a form
+// submission), not a browser GET navigation -- val_id arrives in the
+// request BODY (form-encoded), not the query string. This must be
+// app.post with the urlencoded body parser, matching /fail and /cancel
+// below. (A GET version would 404/405 with "Cannot POST" exactly like
+// the error this was fixing.)
+app.post('/api/payments/success', express.urlencoded({ extended: true }), async (req, res) => {
+  const val_id = req.body.val_id || req.query.val_id;
+  const frontendBase = process.env.FRONTEND_URL || 'http://localhost:4200';
+
+  if (!val_id) {
+    return res.redirect(`${frontendBase}/?payment=error&reason=missing_val_id`);
+  }
+
+  try {
+    const result = await confirmPaymentByValId(val_id, 'success_redirect');
+    if (result.ok) {
+      return res.redirect(`${frontendBase}/?payment=success&booking_id=${result.bookingId}`);
+    }
+    return res.redirect(`${frontendBase}/?payment=error&reason=${encodeURIComponent(result.reason || 'validation_failed')}`);
+  } catch (err) {
+    return res.redirect(`${frontendBase}/?payment=error&reason=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.post('/api/payments/fail', express.urlencoded({ extended: true }), async (req, res) => {
+  const frontendBase = process.env.FRONTEND_URL || 'http://localhost:4200';
+  const tranId = req.body.tran_id || req.query.tran_id;
+  let bookingIdForRedirect = null;
+
+  if (tranId) {
+    try {
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ?`, [tranId]);
+      const transaction = await dbGetAsync(`SELECT * FROM payment_transactions WHERE tran_id = ?`, [tranId]);
+      if (transaction) {
+        bookingIdForRedirect = transaction.booking_id;
+        const booking = await dbGetAsync(
+          `SELECT b.*, s.start_time, s.end_time FROM bookings b JOIN slots s ON b.slot_id = s.id WHERE b.id = ?`,
+          [transaction.booking_id]
+        );
+        if (booking) notificationService.notifyPaymentFailed(booking, 'declined');
+      }
+    } catch (err) {
+      console.error('[Payments] Error handling fail redirect:', err.message);
+    }
+  }
+
+  const bookingIdQuery = bookingIdForRedirect ? `&booking_id=${bookingIdForRedirect}` : '';
+  res.redirect(`${frontendBase}/?payment=failed${bookingIdQuery}`);
+});
+
+app.post('/api/payments/cancel', express.urlencoded({ extended: true }), async (req, res) => {
+  const frontendBase = process.env.FRONTEND_URL || 'http://localhost:4200';
+  const tranId = req.body.tran_id || req.query.tran_id;
+  let bookingIdForRedirect = null;
+
+  if (tranId) {
+    try {
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'cancelled' WHERE tran_id = ?`, [tranId]);
+      const transaction = await dbGetAsync(`SELECT * FROM payment_transactions WHERE tran_id = ?`, [tranId]);
+      if (transaction) {
+        bookingIdForRedirect = transaction.booking_id;
+        const booking = await dbGetAsync(
+          `SELECT b.*, s.start_time, s.end_time FROM bookings b JOIN slots s ON b.slot_id = s.id WHERE b.id = ?`,
+          [transaction.booking_id]
+        );
+        if (booking) notificationService.notifyPaymentFailed(booking, 'cancelled');
+      }
+    } catch (err) {
+      console.error('[Payments] Error handling cancel redirect:', err.message);
+    }
+  }
+
+  const bookingIdQuery = bookingIdForRedirect ? `&booking_id=${bookingIdForRedirect}` : '';
+  res.redirect(`${frontendBase}/?payment=cancelled${bookingIdQuery}`);
+});
+
+// 4. Admin settings: read/update the advance payment percentage.
+app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const percentage = await settingsService.getAdvancePaymentPercentage();
+    res.json({ advance_payment_percentage: percentage });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to load settings', error: err.message });
+  }
+});
+
+app.put('/api/admin/settings', authenticateAdmin, async (req, res) => {
+  const { advance_payment_percentage } = req.body;
+  if (advance_payment_percentage === undefined) {
+    return res.status(400).json({ message: 'advance_payment_percentage is required' });
+  }
+  const parsed = parseFloat(advance_payment_percentage);
+  if (isNaN(parsed) || parsed <= 0 || parsed > 100) {
+    return res.status(400).json({ message: 'advance_payment_percentage must be a number between 0 and 100' });
+  }
+
+  try {
+    await settingsService.setSetting('advance_payment_percentage', parsed);
+    res.json({ message: 'Settings updated', advance_payment_percentage: parsed });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update settings', error: err.message });
+  }
 });
 
 

@@ -401,6 +401,85 @@
   }
 }
 
+/* Full-page Payment Result View */
+.payment-result-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #0f172a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 500;
+  /* above everything else, including normal modals */
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.payment-result-card {
+  background-color: #1e293b;
+  border-radius: 20px;
+  max-width: 480px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  animation: modalSlideUp 0.3s ease-out;
+}
+
+.payment-result-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  margin: 0 auto 1.2rem;
+}
+
+.payment-result-icon.success {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+.payment-result-icon.failed {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.payment-result-icon.cancelled {
+  background-color: rgba(245, 158, 11, 0.15);
+}
+
+.payment-result-icon.error {
+  background-color: rgba(148, 163, 184, 0.15);
+}
+
+.payment-result-card h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+  margin: 0 0 0.6rem 0;
+}
+
+.payment-result-subtitle {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem 0;
+  line-height: 1.5;
+}
+
+.payment-result-card .slot-summary {
+  text-align: left;
+}
+
+.payment-result-actions {
+  margin-top: 1.5rem;
+  justify-content: center;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;

@@ -1,3 +1,89 @@
+<!-- Full-page Payment Result View -- shown after returning from
+     SSLCommerz. Covers the whole screen so the customer's attention goes
+     straight to their booking outcome, not the slot grid underneath. -->
+<div class="payment-result-overlay" *ngIf="paymentResultOutcome">
+  <div class="payment-result-card">
+
+    <div class="payment-result-icon" [ngClass]="paymentResultOutcome">
+      <span *ngIf="paymentResultOutcome === 'success'">✅</span>
+      <span *ngIf="paymentResultOutcome === 'failed'">❌</span>
+      <span *ngIf="paymentResultOutcome === 'cancelled'">⚠️</span>
+      <span *ngIf="paymentResultOutcome === 'error'">❓</span>
+    </div>
+
+    <h2 *ngIf="paymentResultOutcome === 'success'">Booking Confirmed!</h2>
+    <h2 *ngIf="paymentResultOutcome === 'failed'">Payment Failed</h2>
+    <h2 *ngIf="paymentResultOutcome === 'cancelled'">Payment Cancelled</h2>
+    <h2 *ngIf="paymentResultOutcome === 'error'">Something Went Wrong</h2>
+
+    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'success'">
+      Your advance payment was received and your turf booking is confirmed.
+    </p>
+    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'failed'">
+      Your payment didn't go through. Your booking is still pending -- you can try again or pay at the turf.
+    </p>
+    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'cancelled'">
+      You cancelled the payment. Your booking is still pending -- you can try again or pay at the turf.
+    </p>
+    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'error'">
+      We couldn't confirm your payment status. If money was deducted from your account, please contact us with your
+      booking ID.
+    </p>
+
+    <!-- Loading the booking summary -->
+    <div *ngIf="paymentResultLoading" class="spinner-container">
+      <div class="spinner"></div>
+      <p>Loading booking details...</p>
+    </div>
+
+    <!-- Booking summary card -->
+    <div class="slot-summary" *ngIf="!paymentResultLoading && paymentResultBooking">
+      <div class="summary-item">
+        <span class="label">Booking ID:</span>
+        <span class="val">#{{ paymentResultBooking.booking_id }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Date:</span>
+        <span class="val">{{ paymentResultBooking.booking_date }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Time Slot:</span>
+        <span class="val highlight">{{ formatTime12h(paymentResultBooking.start_time) }} - {{
+          formatTime12h(paymentResultBooking.end_time) }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Slot Price:</span>
+        <span class="val">৳ {{ paymentResultBooking.price }}</span>
+      </div>
+      <div class="summary-item" *ngIf="paymentResultBooking.amount_paid > 0">
+        <span class="label">Amount Paid:</span>
+        <span class="val highlight">৳ {{ paymentResultBooking.amount_paid }}</span>
+      </div>
+      <div class="summary-item" *ngIf="paymentResultBooking.balance_due > 0">
+        <span class="label">Balance Due (at turf):</span>
+        <span class="val">৳ {{ paymentResultBooking.balance_due }}</span>
+      </div>
+    </div>
+
+    <!-- No booking summary available (fetch failed, or no booking_id in the redirect) -->
+    <p class="payment-result-subtitle" *ngIf="!paymentResultLoading && !paymentResultBooking && paymentResultBookingId">
+      Booking ID: #{{ paymentResultBookingId }}
+    </p>
+
+    <div class="modal-footer payment-result-actions">
+      <button type="button" class="btn btn-secondary"
+        *ngIf="(paymentResultOutcome === 'failed' || paymentResultOutcome === 'cancelled') && paymentResultBookingId"
+        (click)="retryPaymentFromResult()">
+        Try Payment Again
+      </button>
+      <button type="button" class="btn btn-primary" (click)="closePaymentResult()">
+        Continue Browsing
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <div class="portal-container">
   <!-- Navbar -->
   <header class="navbar">
@@ -10,6 +96,7 @@
       <a routerLink="/admin/login" class="btn btn-secondary admin-btn">Admin Panel</a>
     </nav>
   </header>
+
 
   <!-- Hero Section -->
   <section class="hero">
@@ -272,6 +359,54 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Confirmation Modal -- shown after booking is created with a
+     paid method selected, before redirecting to SSLCommerz -->
+<div class="modal-backdrop" *ngIf="showPaymentConfirm">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Confirm Advance Payment</h2>
+      <button class="close-btn" (click)="closePaymentConfirm()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div *ngIf="paymentConfirmLoading" class="spinner-container">
+        <div class="spinner"></div>
+        <p>Preparing payment...</p>
+      </div>
+
+      <div *ngIf="!paymentConfirmLoading && paymentConfirmError" class="alert error-alert">
+        <span class="alert-icon">⚠️</span>
+        <p>{{ paymentConfirmError }}</p>
+      </div>
+
+      <div *ngIf="!paymentConfirmLoading && !paymentConfirmError && paymentConfirmAmount !== null">
+        <div class="slot-summary">
+          <div class="summary-item">
+            <span class="label">Booking ID:</span>
+            <span class="val">#{{ paymentConfirmBookingId }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Advance to pay now:</span>
+            <span class="val highlight">৳ {{ paymentConfirmAmount }}</span>
+          </div>
+        </div>
+        <p class="form-err" style="margin-top: 0.5rem;">
+          The remaining balance can be paid at the turf. Your booking will be confirmed automatically once this advance
+          payment is verified.
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closePaymentConfirm()">Pay at Turf Instead</button>
+        <button type="button" class="btn btn-primary" [disabled]="paymentConfirmLoading || !!paymentConfirmError"
+          (click)="confirmAndPay()">
+          Pay Now
+        </button>
+      </div>
     </div>
   </div>
 </div>

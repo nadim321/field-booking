@@ -191,6 +191,9 @@ function initializePool() {
       team_name VARCHAR(255),
       status VARCHAR(50) DEFAULT 'pending',
       payment_status VARCHAR(50) DEFAULT 'unpaid',
+      payment_method VARCHAR(50) NULL,
+      transaction_id VARCHAR(100) NULL,
+      amount_paid DECIMAL(10,2) DEFAULT 0,
       recurring_booking_id INT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -206,7 +209,50 @@ function initializePool() {
               return;
             }
 
-            seedData();
+            // payment_transactions is the full audit trail of every payment
+            // attempt against a booking (initiated, validated, failed,
+            // cancelled, expired) -- bookings.transaction_id/amount_paid only
+            // cache the LATEST successful state for quick access; this table
+            // is the source of truth for history/debugging.
+            dbWrapper.run(`
+            CREATE TABLE IF NOT EXISTS payment_transactions (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              booking_id INT NOT NULL,
+              tran_id VARCHAR(100) NOT NULL UNIQUE,
+              amount DECIMAL(10,2) NOT NULL,
+              currency VARCHAR(10) DEFAULT 'BDT',
+              status VARCHAR(30) DEFAULT 'initiated',
+              val_id VARCHAR(100) NULL,
+              card_type VARCHAR(50) NULL,
+              bank_tran_id VARCHAR(100) NULL,
+              raw_ipn_payload TEXT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB
+          `, [], (err) => {
+              if (err) {
+                console.error("Error creating payment_transactions table:", err.message);
+                return;
+              }
+
+              // Generic key-value settings table. Currently only used for
+              // advance_payment_percentage, but kept generic so future
+              // admin-configurable values don't each need their own column
+              // or migration.
+              dbWrapper.run(`
+              CREATE TABLE IF NOT EXISTS app_settings (
+                setting_key VARCHAR(100) PRIMARY KEY,
+                setting_value VARCHAR(255) NOT NULL
+              ) ENGINE=InnoDB
+            `, [], (err) => {
+                if (err) {
+                  console.error("Error creating app_settings table:", err.message);
+                  return;
+                }
+
+                seedData();
+              });
+            });
           });
 
         });
@@ -217,6 +263,28 @@ function initializePool() {
 }
 
 function seedData() {
+  // Seed default app settings
+  dbWrapper.get("SELECT COUNT(*) as count FROM app_settings", [], (err, row) => {
+    if (err) {
+      console.error("Error checking app_settings count:", err.message);
+      return;
+    }
+    const count = row ? (row.count || 0) : 0;
+    if (count === 0) {
+      dbWrapper.run(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+        ['advance_payment_percentage', '25'],
+        (err) => {
+          if (err) {
+            console.error("Error seeding default app settings:", err.message);
+          } else {
+            console.log("Default app settings seeded (advance_payment_percentage=25).");
+          }
+        }
+      );
+    }
+  });
+
   // Seed default admin user
   dbWrapper.get("SELECT COUNT(*) as count FROM users", [], (err, row) => {
     if (err) {

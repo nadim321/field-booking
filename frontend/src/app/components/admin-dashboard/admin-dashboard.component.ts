@@ -106,6 +106,10 @@ export class AdminDashboardComponent implements OnInit {
   slotIsActive = 1;
   slotCategory: number | null = null; // null = "Uncategorized", admin always picks manually
 
+  // Payment settings (advance payment percentage)
+  advancePaymentPercentage: number = 25;
+  settingsLoading = false;
+
   loading = false;
   errorMsg = '';
   successMsg = '';
@@ -123,6 +127,7 @@ export class AdminDashboardComponent implements OnInit {
     this.loadBookings();
     this.loadSlots();
     this.loadRecurringBookings();
+    this.loadSettings();
   }
 
   // --- API Load Operations ---
@@ -156,6 +161,36 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: (err) => {
         this.handleError(err);
+      }
+    });
+  }
+
+  // --- Payment Settings ---
+  loadSettings(): void {
+    this.apiService.getSettings().subscribe({
+      next: (res) => {
+        this.advancePaymentPercentage = res.advance_payment_percentage;
+      },
+      error: (err) => {
+        this.handleError(err);
+      }
+    });
+  }
+
+  saveAdvancePaymentPercentage(): void {
+    if (this.advancePaymentPercentage <= 0 || this.advancePaymentPercentage > 100) {
+      this.showToast('Percentage must be between 1 and 100', 'error');
+      return;
+    }
+    this.settingsLoading = true;
+    this.apiService.updateSettings({ advance_payment_percentage: this.advancePaymentPercentage }).subscribe({
+      next: () => {
+        this.settingsLoading = false;
+        this.showToast('Advance payment percentage updated', 'success');
+      },
+      error: (err) => {
+        this.settingsLoading = false;
+        this.showToast(err.error?.message || 'Failed to update settings', 'error');
       }
     });
   }

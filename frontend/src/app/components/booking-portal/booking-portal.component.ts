@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 
 interface TurfSlot {
   id: number;
@@ -36,6 +36,8 @@ interface HoldInfo {
 })
 export class BookingPortalComponent implements OnInit, OnDestroy {
   private apiService = inject(ApiService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   selectedDate: string = '';
   slots: TurfSlot[] = [];
@@ -66,6 +68,36 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   toastType: 'success' | 'error' | '' = '';
   todayDate: string = '';
 
+  // Payment confirmation step -- shown after a booking is created with a
+  // paid method selected, BEFORE redirecting to SSLCommerz. Per design
+  // decision: the customer reviews the advance amount and explicitly
+  // clicks "Pay Now" rather than being redirected immediately.
+  showPaymentConfirm: boolean = false;
+  paymentConfirmBookingId: number | null = null;
+  paymentConfirmAmount: number | null = null;
+  paymentConfirmLoading: boolean = false;
+  paymentConfirmError: string = '';
+
+  // Full-page post-payment RESULT view -- shown when the customer is
+  // redirected back from SSLCommerz (?payment=success|failed|cancelled|error).
+  // One shared view with a state-driven outcome, rather than separate
+  // pages, since all outcomes need the same booking summary card and only
+  // the headline/actions differ.
+  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | null = null;
+  paymentResultBooking: {
+    booking_id: number;
+    booking_date: string;
+    start_time: string;
+    end_time: string;
+    price: number;
+    amount_paid: number;
+    balance_due: number;
+    status: string;
+    payment_status: string;
+  } | null = null;
+  paymentResultLoading: boolean = false;
+  paymentResultBookingId: number | null = null; // kept for "Try Again" retry
+
   ngOnInit(): void {
     // Set default date to today in YYYY-MM-DD local format
     this.todayDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
@@ -86,6 +118,58 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         this.loadSlots();
       }
     }, 15000);
+
+    // After a customer pays via SSLCommerz, the backend redirects back
+    // here with ?payment=success|failed|cancelled&booking_id=X (see
+    // GET /api/payments/success in server.js). Show a full-page result
+    // view (booking summary + outcome) rather than just a toast, then
+    // strip the query params so refreshing the page doesn't re-show it.
+    const params = this.route.snapshot.queryParamMap;
+    const paymentResult = params.get('payment');
+    const bookingIdParam = params.get('booking_id');
+
+    if (paymentResult === 'success' || paymentResult === 'failed' || paymentResult === 'cancelled' || paymentResult === 'error') {
+      this.paymentResultOutcome = paymentResult;
+      const bookingId = bookingIdParam ? parseInt(bookingIdParam, 10) : null;
+      this.paymentResultBookingId = bookingId;
+
+      if (bookingId) {
+        this.paymentResultLoading = true;
+        this.apiService.getBookingResult(bookingId).subscribe({
+          next: (res) => {
+            this.paymentResultLoading = false;
+            this.paymentResultBooking = res;
+          },
+          error: () => {
+            this.paymentResultLoading = false;
+            // Booking summary couldn't be fetched -- the outcome message
+            // alone still tells the customer what happened, just without
+            // the detail card.
+            this.paymentResultBooking = null;
+          }
+        });
+      }
+    }
+    if (paymentResult) {
+      this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    }
+  }
+
+  /** Dismisses the full-page payment result view, returning to normal browsing. */
+  closePaymentResult(): void {
+    this.paymentResultOutcome = null;
+    this.paymentResultBooking = null;
+    this.paymentResultBookingId = null;
+    this.loadSlots();
+  }
+
+  /** From the failed/cancelled result view -- retries payment for the
+   * same booking by reopening the payment confirmation step. */
+  retryPaymentFromResult(): void {
+    if (!this.paymentResultBookingId) return;
+    const bookingId = this.paymentResultBookingId;
+    this.closePaymentResult();
+    this.openPaymentConfirm(bookingId);
   }
 
   ngOnDestroy(): void {
@@ -317,9 +401,10 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
 
         this.loadSlots();
 
-        // If paying now (simulated checkout)
+        // If paying now: show the confirmation step (review amount, then
+        // an explicit "Pay Now" click) rather than redirecting immediately.
         if (usedPaymentMethod !== 'later') {
-          this.initiateCheckout(res.booking_id, usedPaymentMethod);
+          this.openPaymentConfirm(res.booking_id);
         } else {
           this.showToast('Booking requested successfully! Pending admin approval.', 'success');
         }
@@ -345,21 +430,51 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     });
   }
 
-  initiateCheckout(bookingId: number, method: string): void {
-    this.showToast('Initiating payment gateway...', 'success');
-    this.apiService.initiatePayment(bookingId, method).subscribe({
+  /**
+   * Opens the payment confirmation step for a just-created booking. Calls
+   * /api/payments/initiate up front so the exact advance amount is known
+   * and shown to the customer before they commit to "Pay Now" -- the
+   * actual redirect to SSLCommerz only happens when they click that
+   * button (see confirmAndPay()), not here.
+   */
+  openPaymentConfirm(bookingId: number): void {
+    this.paymentConfirmBookingId = bookingId;
+    this.paymentConfirmAmount = null;
+    this.paymentConfirmError = '';
+    this.showPaymentConfirm = true;
+    this.paymentConfirmLoading = true;
+
+    this.apiService.initiatePayment(bookingId).subscribe({
       next: (res) => {
-        if (res.checkout_url) {
-          // Redirect the user to the mock checkout page
-          window.location.href = res.checkout_url;
-        } else {
-          this.showToast('Payment initiated (Mock)', 'success');
-        }
+        this.paymentConfirmLoading = false;
+        this.paymentConfirmAmount = res.amount;
+        // Stash the gateway URL for confirmAndPay() to use -- re-fetching
+        // it on click would create a second, redundant payment session.
+        this._pendingGatewayUrl = res.gateway_page_url;
       },
       error: (err) => {
-        this.showToast('Payment failed, booking placed as pending', 'error');
+        this.paymentConfirmLoading = false;
+        this.paymentConfirmError = err.error?.message || 'Failed to start payment. Your booking is still pending -- you can try paying later.';
       }
     });
+  }
+
+  private _pendingGatewayUrl: string | null = null;
+
+  /** Customer clicked "Pay Now" -- this is the only place that actually
+   * navigates the browser away to SSLCommerz's hosted payment page. */
+  confirmAndPay(): void {
+    if (!this._pendingGatewayUrl) return;
+    window.location.href = this._pendingGatewayUrl;
+  }
+
+  /** Customer chose to skip paying now ("Pay at the turf instead"). */
+  closePaymentConfirm(): void {
+    this.showPaymentConfirm = false;
+    this.paymentConfirmBookingId = null;
+    this.paymentConfirmAmount = null;
+    this._pendingGatewayUrl = null;
+    this.showToast('No problem -- your booking is pending admin approval. You can pay later if you change your mind.', 'success');
   }
 
   showToast(message: string, type: 'success' | 'error'): void {

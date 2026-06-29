@@ -92,6 +92,17 @@ function notifyPaymentReceived(booking) {
   return dispatch(booking, templates.paymentReceived, 'payment_received');
 }
 
+/** Trigger: a verified advance payment automatically confirmed a booking. */
+function notifyAdvancePaymentConfirmed(booking) {
+  return dispatch(booking, templates.advancePaymentConfirmed, 'advance_payment_confirmed');
+}
+
+/** Trigger: a payment attempt failed/was cancelled/expired. `reason` is a
+ * short human-readable word/phrase (e.g. "declined", "cancelled", "timed out"). */
+function notifyPaymentFailed(booking, reason) {
+  return dispatch(booking, (b) => templates.paymentFailed(b, reason), 'payment_failed');
+}
+
 /**
  * Sends an email-only notification to the SEASON CUSTOMER (no SMS for
  * this one is also fine to add later, but per spec the conflict notice
@@ -174,6 +185,8 @@ module.exports = {
   notifyBookingApproved,
   notifyBookingCancelled,
   notifyPaymentReceived,
+  notifyAdvancePaymentConfirmed,
+  notifyPaymentFailed,
   notifyRecurringConflict,
   notifyRecurringConflictAdmin,
   notifyRecurringRequestSubmittedAdmin

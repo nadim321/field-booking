@@ -336,6 +336,32 @@
 
       <!-- ================= SLOTS SETUP TAB ================= -->
       <section *ngIf="activeTab === 'slots'" class="tab-content fade-in">
+
+        <!-- Payment Settings Panel -->
+        <div class="panel-card" style="margin-bottom: 2rem;">
+          <div class="panel-header">
+            <h3>💳 Advance Payment Settings</h3>
+          </div>
+          <div class="panel-body">
+            <div class="form-row" style="align-items: flex-end;">
+              <div class="form-group col">
+                <label for="advancePct">Required advance payment (% of slot price)</label>
+                <input type="number" id="advancePct" name="advancePct" [(ngModel)]="advancePaymentPercentage"
+                  class="form-control" min="1" max="100" step="1" />
+              </div>
+              <div class="form-group col" style="flex: 0 0 auto;">
+                <button (click)="saveAdvancePaymentPercentage()" class="btn btn-primary" [disabled]="settingsLoading">
+                  {{ settingsLoading ? 'Saving...' : 'Save' }}
+                </button>
+              </div>
+            </div>
+            <p class="empty-state" style="text-align: left; padding: 0;">
+              Customers must pay this percentage of a slot's price via the payment gateway to automatically confirm
+              their booking. The remaining balance is collected at the turf.
+            </p>
+          </div>
+        </div>
+
         <div class="section-actions">
           <h3>Standard Hourly Turf Slot templates</h3>
           <button (click)="openAddSlotModal()" class="btn btn-primary btn-sm">➕ Add Slot Config</button>
