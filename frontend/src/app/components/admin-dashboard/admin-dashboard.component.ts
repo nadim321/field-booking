@@ -76,7 +76,7 @@ export class AdminDashboardComponent implements OnInit {
   private router = inject(Router);
 
   // Tabs navigation
-  activeTab: 'overview' | 'bookings' | 'season' | 'slots' = 'overview';
+  activeTab: 'overview' | 'bookings' | 'season' | 'slots' | 'blocking' = 'overview';
 
   // Stats Data
   stats: any = null;
@@ -110,6 +110,28 @@ export class AdminDashboardComponent implements OnInit {
   advancePaymentPercentage: number = 25;
   settingsLoading = false;
 
+  // --- Bulk Slot Blocking ---
+  // Date range and reason for the block action
+  blockStartDate: string = '';
+  blockEndDate: string = '';
+  blockReason: string = 'maintenance';
+  blockCustomReason: string = '';
+  // Which slot IDs are checked in the selection list
+  selectedSlotIdsForBlock: Set<number> = new Set();
+  blockLoading = false;
+  // Preview of blocks already set for the chosen date range
+  existingBlocks: any[] = [];  // rows from GET /api/admin/slot-blocks
+  blockPreviewLoading = false;
+  // 'block' or 'unblock' action toggle
+  blockAction: 'block' | 'unblock' = 'block';
+  readonly blockReasonPresets = [
+    { value: 'maintenance', label: '🔧 Maintenance' },
+    { value: 'tournament', label: '🏆 Tournament' },
+    { value: 'holiday',     label: '🎉 Public Holiday' },
+    { value: 'private',     label: '🔒 Private Event' },
+    { value: 'custom',      label: '✏️ Custom reason...' }
+  ];
+
   loading = false;
   errorMsg = '';
   successMsg = '';
@@ -128,6 +150,12 @@ export class AdminDashboardComponent implements OnInit {
     this.loadSlots();
     this.loadRecurringBookings();
     this.loadSettings();
+    // Set default blocking dates to today + 7 days
+    const todayStr = new Date().toISOString().split('T')[0];
+    this.blockStartDate = todayStr;
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 6);
+    this.blockEndDate = nextWeek.toISOString().split('T')[0];
   }
 
   // --- API Load Operations ---
@@ -344,6 +372,107 @@ export class AdminDashboardComponent implements OnInit {
         this.showToast(err.error?.message || 'Generation pass failed', 'error');
       }
     });
+  }
+
+  // --- Bulk Slot Blocking Operations ---
+
+  toggleSlotBlockSelection(slotId: number): void {
+    if (this.selectedSlotIdsForBlock.has(slotId)) {
+      this.selectedSlotIdsForBlock.delete(slotId);
+    } else {
+      this.selectedSlotIdsForBlock.add(slotId);
+    }
+  }
+
+  isSlotSelectedForBlock(slotId: number): boolean {
+    return this.selectedSlotIdsForBlock.has(slotId);
+  }
+
+  selectAllSlotsForBlock(): void {
+    this.slots.forEach(s => this.selectedSlotIdsForBlock.add(s.id));
+  }
+
+  clearSlotBlockSelection(): void {
+    this.selectedSlotIdsForBlock.clear();
+  }
+
+  get resolvedBlockReason(): string {
+    return this.blockReason === 'custom'
+      ? (this.blockCustomReason.trim() || 'Blocked')
+      : this.blockReasonPresets.find(p => p.value === this.blockReason)?.label || 'Blocked';
+  }
+
+  /** Loads existing blocks for the current date range so the preview table stays current. */
+  loadBlockPreview(): void {
+    if (!this.blockStartDate || !this.blockEndDate) return;
+    this.blockPreviewLoading = true;
+    this.apiService.getSlotBlocks(this.blockStartDate, this.blockEndDate).subscribe({
+      next: (rows) => {
+        this.existingBlocks = rows;
+        this.blockPreviewLoading = false;
+      },
+      error: () => {
+        this.blockPreviewLoading = false;
+      }
+    });
+  }
+
+  applyBulkBlock(): void {
+    if (this.selectedSlotIdsForBlock.size === 0) {
+      this.showToast('Please select at least one slot', 'error');
+      return;
+    }
+    if (!this.blockStartDate || !this.blockEndDate) {
+      this.showToast('Please set a date range', 'error');
+      return;
+    }
+    const slotIds = Array.from(this.selectedSlotIdsForBlock);
+    const reason = this.resolvedBlockReason;
+
+    const confirmMsg = this.blockAction === 'block'
+      ? `Block ${slotIds.length} slot(s) from ${this.blockStartDate} to ${this.blockEndDate} (reason: "${reason}")? This will prevent customers from booking these slots.`
+      : `Unblock ${slotIds.length} slot(s) from ${this.blockStartDate} to ${this.blockEndDate}? Customers will be able to book these slots again.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    this.blockLoading = true;
+    if (this.blockAction === 'block') {
+      this.apiService.bulkBlockSlots({ slot_ids: slotIds, start_date: this.blockStartDate, end_date: this.blockEndDate, reason }).subscribe({
+        next: (res) => {
+          this.blockLoading = false;
+          this.showToast(`${res.blocked} slot/date(s) blocked. ${res.skipped} already existed.`, 'success');
+          this.clearSlotBlockSelection();
+          this.loadBlockPreview();
+        },
+        error: (err) => {
+          this.blockLoading = false;
+          this.showToast(err.error?.message || 'Failed to apply blocks', 'error');
+        }
+      });
+    } else {
+      this.apiService.bulkUnblockSlots({ slot_ids: slotIds, start_date: this.blockStartDate, end_date: this.blockEndDate }).subscribe({
+        next: (res) => {
+          this.blockLoading = false;
+          this.showToast(`${res.removed} block(s) removed.`, 'success');
+          this.clearSlotBlockSelection();
+          this.loadBlockPreview();
+        },
+        error: (err) => {
+          this.blockLoading = false;
+          this.showToast(err.error?.message || 'Failed to remove blocks', 'error');
+        }
+      });
+    }
+  }
+
+  /** Groups existingBlocks rows by date for the preview table. */
+  get blockedDateGroups(): { date: string; slots: any[] }[] {
+    const map: Record<string, any[]> = {};
+    this.existingBlocks.forEach(b => {
+      if (!map[b.block_date]) map[b.block_date] = [];
+      map[b.block_date].push(b);
+    });
+    return Object.keys(map).sort().map(date => ({ date, slots: map[date] }));
   }
 
   // --- Slot Template Operations ---

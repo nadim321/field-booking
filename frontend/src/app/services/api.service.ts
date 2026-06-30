@@ -262,4 +262,40 @@ export class ApiService {
       headers: this.getAuthHeaders()
     });
   }
+
+  // --- Admin: Bulk Slot Blocking ---
+
+  /** Blocks selected slot IDs for every date in the given range. */
+  bulkBlockSlots(data: {
+    slot_ids: number[];
+    start_date: string;
+    end_date: string;
+    reason?: string;
+  }): Observable<{ message: string; blocked: number; skipped: number }> {
+    return this.http.post<any>(`${this.apiUrl}/admin/slot-blocks/bulk`, data, {
+      headers: this.getAuthHeaders()
+    });
+  }
+
+  /** Lists existing admin blocks, optionally filtered by date range. */
+  getSlotBlocks(startDate?: string, endDate?: string): Observable<any[]> {
+    let url = `${this.apiUrl}/admin/slot-blocks`;
+    const parts: string[] = [];
+    if (startDate) parts.push(`start_date=${startDate}`);
+    if (endDate) parts.push(`end_date=${endDate}`);
+    if (parts.length) url += '?' + parts.join('&');
+    return this.http.get<any[]>(url, { headers: this.getAuthHeaders() });
+  }
+
+  /** Removes blocks for selected slot IDs in the given date range. */
+  bulkUnblockSlots(data: {
+    slot_ids: number[];
+    start_date: string;
+    end_date: string;
+  }): Observable<{ message: string; removed: number }> {
+    return this.http.delete<any>(`${this.apiUrl}/admin/slot-blocks/bulk`, {
+      headers: this.getAuthHeaders(),
+      body: data
+    });
+  }
 }

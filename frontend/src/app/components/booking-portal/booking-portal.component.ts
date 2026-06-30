@@ -12,7 +12,8 @@ interface TurfSlot {
   is_active: number;
   category: number | null;
   category_label: string | null;
-  status: 'available' | 'held' | 'season_reserved' | 'pending' | 'approved';
+  status: 'available' | 'held' | 'season_reserved' | 'pending' | 'approved' | 'blocked';
+  block_reason: string | null;
   booking_details?: {
     booking_id: number;
     team_name?: string;
@@ -222,6 +223,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
    * underscore like "SEASON_RESERVED" to the customer). */
   statusLabel(status: TurfSlot['status']): string {
     if (status === 'season_reserved') return 'SEASON BOOKING';
+    if (status === 'blocked') return 'BLOCKED';
     return status.toUpperCase();
   }
 

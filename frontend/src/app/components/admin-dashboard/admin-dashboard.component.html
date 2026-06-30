@@ -21,6 +21,9 @@
       <button (click)="activeTab = 'slots'" [class.active]="activeTab === 'slots'" class="menu-item">
         <span class="menu-icon">⚙️</span> Slot Setup
       </button>
+      <button (click)="activeTab = 'blocking'; loadBlockPreview()" [class.active]="activeTab === 'blocking'" class="menu-item">
+        <span class="menu-icon">🚫</span> Bulk Blocking
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -332,6 +335,111 @@
             </table>
           </div>
         </div>
+      </section>
+
+      <!-- ================= BULK BLOCKING TAB ================= -->
+      <section *ngIf="activeTab === 'blocking'" class="tab-content fade-in">
+
+        <!-- Action Card -->
+        <div class="panel-card" style="margin-bottom: 2rem;">
+          <div class="panel-header">
+            <h3>🚫 Bulk Slot Blocking</h3>
+          </div>
+          <div class="panel-body">
+
+            <!-- Action toggle -->
+            <div class="block-action-toggle" style="margin-bottom: 1.5rem;">
+              <button (click)="blockAction = 'block'" class="btn btn-sm" [ngClass]="blockAction === 'block' ? 'btn-primary' : 'btn-secondary'">🚫 Block Slots</button>
+              <button (click)="blockAction = 'unblock'" class="btn btn-sm" [ngClass]="blockAction === 'unblock' ? 'btn-primary' : 'btn-secondary'">✅ Unblock Slots</button>
+            </div>
+
+            <!-- Date Range -->
+            <div class="form-row" style="margin-bottom: 1.5rem;">
+              <div class="form-group col">
+                <label for="blockStart">From Date</label>
+                <input type="date" id="blockStart" [(ngModel)]="blockStartDate" class="form-control" (change)="loadBlockPreview()" />
+              </div>
+              <div class="form-group col">
+                <label for="blockEnd">To Date</label>
+                <input type="date" id="blockEnd" [(ngModel)]="blockEndDate" class="form-control" [min]="blockStartDate" (change)="loadBlockPreview()" />
+              </div>
+              <div class="form-group col" *ngIf="blockAction === 'block'">
+                <label for="blockReason">Reason</label>
+                <select id="blockReason" [(ngModel)]="blockReason" class="form-control">
+                  <option *ngFor="let p of blockReasonPresets" [value]="p.value">{{ p.label }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Custom reason input -->
+            <div class="form-group" *ngIf="blockAction === 'block' && blockReason === 'custom'" style="margin-bottom: 1.5rem;">
+              <label for="blockCustomReason">Custom Reason</label>
+              <input type="text" id="blockCustomReason" [(ngModel)]="blockCustomReason" class="form-control" placeholder="e.g. Owner's private tournament" />
+            </div>
+
+            <!-- Slot Selection -->
+            <div style="margin-bottom: 1.5rem;">
+              <div class="section-actions" style="margin-bottom: 0.75rem;">
+                <h4 style="color: #e2e8f0; font-weight: 600;">Select Slots to {{ blockAction === 'block' ? 'Block' : 'Unblock' }}</h4>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button (click)="selectAllSlotsForBlock()" class="btn btn-secondary btn-sm">Select All</button>
+                  <button (click)="clearSlotBlockSelection()" class="btn btn-secondary btn-sm">Clear</button>
+                </div>
+              </div>
+              <div class="block-slot-grid">
+                <label *ngFor="let slot of slots" class="block-slot-checkbox" [class.selected]="isSlotSelectedForBlock(slot.id)">
+                  <input type="checkbox" [checked]="isSlotSelectedForBlock(slot.id)" (change)="toggleSlotBlockSelection(slot.id)" />
+                  <span class="block-slot-time">{{ slot.start_time }}&ndash;{{ slot.end_time }}</span>
+                  <span class="block-slot-price">৳{{ slot.price }}</span>
+                </label>
+              </div>
+              <p class="empty-state" *ngIf="slots.length === 0" style="padding: 0.5rem 0;">No slots configured yet. Add slots first.</p>
+            </div>
+
+            <!-- Summary & Apply -->
+            <div class="block-apply-row">
+              <p class="block-summary" *ngIf="selectedSlotIdsForBlock.size > 0">
+                <strong>{{ selectedSlotIdsForBlock.size }}</strong> slot(s) selected ·
+                <span *ngIf="blockStartDate && blockEndDate"> {{ blockStartDate }} → {{ blockEndDate }}</span>
+                <span *ngIf="blockAction === 'block'"> · Reason: <em>{{ resolvedBlockReason }}</em></span>
+              </p>
+              <p class="block-summary" *ngIf="selectedSlotIdsForBlock.size === 0" style="color: #64748b;">No slots selected.</p>
+              <button (click)="applyBulkBlock()" class="btn" [disabled]="blockLoading || selectedSlotIdsForBlock.size === 0"
+                [ngClass]="blockAction === 'block' ? 'btn-primary' : 'btn-secondary'">
+                <span *ngIf="!blockLoading">{{ blockAction === 'block' ? '🚫 Apply Block' : '✅ Remove Blocks' }}</span>
+                <span *ngIf="blockLoading">Applying...</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Existing Blocks Preview -->
+        <div class="panel-card">
+          <div class="panel-header" style="justify-content: space-between;">
+            <h3>📋 Existing Blocks in Range</h3>
+            <button (click)="loadBlockPreview()" class="btn btn-secondary btn-sm" [disabled]="blockPreviewLoading">🔄 Refresh</button>
+          </div>
+          <div class="panel-body">
+            <div *ngIf="blockPreviewLoading" style="text-align:center; padding: 2rem; color: #94a3b8;">Loading...</div>
+
+            <div *ngIf="!blockPreviewLoading && blockedDateGroups.length === 0" class="empty-state">
+              No blocks found for the selected date range.
+            </div>
+
+            <div *ngIf="!blockPreviewLoading && blockedDateGroups.length > 0">
+              <div *ngFor="let group of blockedDateGroups" class="block-date-group">
+                <div class="block-date-header">📅 {{ group.date }}</div>
+                <div class="block-chips">
+                  <span *ngFor="let b of group.slots" class="block-chip" [title]="b.reason || 'Blocked'">
+                    {{ b.start_time }}–{{ b.end_time }}
+                    <span class="block-chip-reason" *ngIf="b.reason">{{ b.reason }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </section>
 
       <!-- ================= SLOTS SETUP TAB ================= -->

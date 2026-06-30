@@ -124,6 +124,7 @@
         <span class="legend-item"><span class="dot season-reserved"></span> Season Booking</span>
         <span class="legend-item"><span class="dot pending"></span> Pending Approval</span>
         <span class="legend-item"><span class="dot booked"></span> Booked / Occupied</span>
+        <span class="legend-item"><span class="dot blocked"></span> Blocked</span>
       </div>
     </div>
 
@@ -152,7 +153,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
@@ -170,7 +172,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
@@ -188,7 +191,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
@@ -206,7 +210,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
@@ -224,7 +229,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>
@@ -243,7 +249,8 @@
               'status-held': slot.status === 'held',
               'status-season-reserved': slot.status === 'season_reserved',
               'status-pending': slot.status === 'pending',
-              'status-booked': slot.status === 'approved'
+              'status-booked': slot.status === 'approved',
+              'status-blocked': slot.status === 'blocked'
             }" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
             <div class="price">৳ {{ slot.price }} / Hr</div>

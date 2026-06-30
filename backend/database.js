@@ -250,8 +250,31 @@ function initializePool() {
                   return;
                 }
 
+              // slot_blocks: Admin-created blocks for specific slot + date
+              // combinations (e.g. maintenance, tournament, holiday).
+              // Unlike slot_holds (temporary customer holds), these are
+              // permanent until explicitly removed by an admin action.
+              // A block takes priority over any hold or availability check
+              // in GET /api/slots/available.
+              dbWrapper.run(`
+                CREATE TABLE IF NOT EXISTS slot_blocks (
+                  id INT AUTO_INCREMENT PRIMARY KEY,
+                  slot_id INT NOT NULL,
+                  block_date VARCHAR(10) NOT NULL,
+                  reason VARCHAR(255) NULL,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE KEY uq_slot_block_date (slot_id, block_date),
+                  FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE,
+                  INDEX idx_block_date (block_date)
+                ) ENGINE=InnoDB
+              `, [], (err) => {
+                if (err) {
+                  console.error("Error creating slot_blocks table:", err.message);
+                  return;
+                }
                 seedData();
               });
+            });
             });
           });
 

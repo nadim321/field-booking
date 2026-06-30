@@ -955,3 +955,122 @@
   font-size: 0.9rem;
   padding: 2rem 0;
 }
+
+/* ===================== Bulk Blocking Tab ===================== */
+
+.block-action-toggle {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.block-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.block-slot-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  background: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  user-select: none;
+}
+
+.block-slot-checkbox:hover {
+  border-color: #6366f1;
+  background: #1e2a44;
+}
+
+.block-slot-checkbox.selected {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+}
+
+.block-slot-checkbox input[type="checkbox"] {
+  accent-color: #ef4444;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.block-slot-time {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.block-slot-price {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.block-apply-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #1e293b;
+  flex-wrap: wrap;
+}
+
+.block-summary {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.block-summary strong {
+  color: #e2e8f0;
+}
+
+/* Preview section */
+.block-date-group {
+  margin-bottom: 1.25rem;
+}
+
+.block-date-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.block-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.block-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: 20px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.block-chip-reason {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: 0.74rem;
+  border-left: 1px solid rgba(239, 68, 68, 0.3);
+  padding-left: 0.35rem;
+}

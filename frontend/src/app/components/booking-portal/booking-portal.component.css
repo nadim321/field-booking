@@ -190,6 +190,10 @@
   background-color: #ef4444;
 }
 
+.dot.blocked {
+  background-color: #64748b;
+}
+
 /* Category Block */
 .category-block {
   margin-bottom: 2.5rem;
@@ -261,6 +265,12 @@
   opacity: 0.65;
 }
 
+.slot-card.status-blocked {
+  border-left: 4px solid #64748b;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .slot-card .time {
   font-size: 1.2rem;
   font-weight: 700;
@@ -305,6 +315,11 @@
 .status-booked .status-badge {
   background-color: rgba(239, 68, 68, 0.15);
   color: #f87171;
+}
+
+.status-blocked .status-badge {
+  background-color: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
 }
 
 /* Buttons UI */

@@ -194,57 +194,74 @@ app.get('/api/slots/available', (req, res) => {
             }
             const heldSlotIds = holds.map(h => h.slot_id);
 
-            // Also fetch active recurring (season) booking templates whose
-            // weekday matches this date and whose range covers it -- these
-            // slots must show as reserved even before the daily scheduler
-            // has generated this week's actual `bookings` row, otherwise
-            // customers can (and did) book straight through the gap. See
-            // findActiveRecurringConflict() for the matching write-side guard.
-            const targetDayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay();
+            // Fetch admin-created permanent blocks for this date.
+            // These have the highest priority -- a slot blocked by the admin
+            // is unavailable even if a season booking or hold also exists
+            // for it. Blocks are set via POST /api/admin/slot-blocks/bulk.
             db.all(
-              `SELECT slot_id FROM recurring_bookings WHERE status = 'active' AND day_of_week = ? AND start_date <= ? AND end_date >= ?`,
-              [targetDayOfWeek, date, date],
-              (err, recurringTemplates) => {
+              `SELECT slot_id, reason FROM slot_blocks WHERE block_date = ?`,
+              [date],
+              (err, adminBlocks) => {
                 if (err) {
-                  return res.status(500).json({ message: 'Failed to retrieve season bookings', error: err.message });
+                  return res.status(500).json({ message: 'Failed to retrieve slot blocks', error: err.message });
                 }
-                const seasonReservedSlotIds = recurringTemplates.map(rb => rb.slot_id);
+                const blockedSlotMap = {};
+                adminBlocks.forEach(b => { blockedSlotMap[b.slot_id] = b.reason || 'Blocked'; });
 
-                // Map slot config and join bookings info
-                const result = visibleSlots.map(slot => {
-                  const bookingForSlot = bookings.find(b => b.slot_id === slot.id);
-                  const isHeld = heldSlotIds.includes(slot.id);
-                  const isSeasonReserved = seasonReservedSlotIds.includes(slot.id);
+                // Also fetch active recurring (season) booking templates whose
+                // weekday matches this date and whose range covers it.
+                const targetDayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay();
+                db.all(
+                  `SELECT slot_id FROM recurring_bookings WHERE status = 'active' AND day_of_week = ? AND start_date <= ? AND end_date >= ?`,
+                  [targetDayOfWeek, date, date],
+                  (err, recurringTemplates) => {
+                    if (err) {
+                      return res.status(500).json({ message: 'Failed to retrieve season bookings', error: err.message });
+                    }
+                    const seasonReservedSlotIds = recurringTemplates.map(rb => rb.slot_id);
 
-                  let status;
-                  if (bookingForSlot) {
-                    status = bookingForSlot.status;
-                  } else if (isSeasonReserved) {
-                    status = 'season_reserved';
-                  } else if (isHeld) {
-                    status = 'held';
-                  } else {
-                    status = 'available';
+                    // Map slot config and join bookings info
+                    const result = visibleSlots.map(slot => {
+                      const bookingForSlot = bookings.find(b => b.slot_id === slot.id);
+                      const isAdminBlocked = slot.id in blockedSlotMap;
+                      const isHeld = heldSlotIds.includes(slot.id);
+                      const isSeasonReserved = seasonReservedSlotIds.includes(slot.id);
+
+                      let status;
+                      // Priority: admin block > booking > season reserved > held > available
+                      if (isAdminBlocked) {
+                        status = 'blocked';
+                      } else if (bookingForSlot) {
+                        status = bookingForSlot.status;
+                      } else if (isSeasonReserved) {
+                        status = 'season_reserved';
+                      } else if (isHeld) {
+                        status = 'held';
+                      } else {
+                        status = 'available';
+                      }
+
+                      return {
+                        id: slot.id,
+                        start_time: slot.start_time,
+                        end_time: slot.end_time,
+                        price: slot.price,
+                        is_active: slot.is_active,
+                        category: slot.category,
+                        category_label: categoryLabel(slot.category),
+                        status,
+                        block_reason: isAdminBlocked ? blockedSlotMap[slot.id] : null,
+                        booking_details: bookingForSlot ? {
+                          booking_id: bookingForSlot.id,
+                          team_name: bookingForSlot.team_name,
+                          payment_status: bookingForSlot.payment_status
+                        } : null
+                      };
+                    });
+
+                    res.json({ date, slots: result, server_time: currentTimeStr, is_today: isToday });
                   }
-
-                  return {
-                    id: slot.id,
-                    start_time: slot.start_time,
-                    end_time: slot.end_time,
-                    price: slot.price,
-                    is_active: slot.is_active,
-                    category: slot.category,
-                    category_label: categoryLabel(slot.category),
-                    status,
-                    booking_details: bookingForSlot ? {
-                      booking_id: bookingForSlot.id,
-                      team_name: bookingForSlot.team_name,
-                      payment_status: bookingForSlot.payment_status
-                    } : null
-                  };
-                });
-
-                res.json({ date, slots: result, server_time: currentTimeStr, is_today: isToday });
+                );
               }
             );
           }
@@ -936,6 +953,137 @@ app.post('/api/admin/recurring-bookings/run-now', authenticateAdmin, async (req,
   } catch (err) {
     res.status(500).json({ message: 'Generation pass failed', error: err.message });
   }
+});
+
+// 4c. Admin Bulk Slot Blocking
+
+/**
+ * POST /api/admin/slot-blocks/bulk
+ * Blocks a list of slot IDs across every date in [start_date, end_date].
+ * Body: { slot_ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD', reason?: string }
+ * Uses INSERT IGNORE so duplicate (slot_id, date) pairs are silently skipped.
+ */
+app.post('/api/admin/slot-blocks/bulk', authenticateAdmin, (req, res) => {
+  const { slot_ids, start_date, end_date, reason } = req.body;
+
+  if (!slot_ids || !Array.isArray(slot_ids) || slot_ids.length === 0) {
+    return res.status(400).json({ message: 'slot_ids must be a non-empty array' });
+  }
+  if (!start_date || !end_date) {
+    return res.status(400).json({ message: 'start_date and end_date are required (YYYY-MM-DD)' });
+  }
+
+  const start = new Date(start_date + 'T00:00:00Z');
+  const end = new Date(end_date + 'T00:00:00Z');
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+  }
+  if (end < start) {
+    return res.status(400).json({ message: 'end_date must be on or after start_date' });
+  }
+
+  // Build the full set of (slot_id, date) pairs to insert
+  const rows = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const dateStr = cur.toISOString().slice(0, 10);
+    slot_ids.forEach(slotId => rows.push([slotId, dateStr, reason || null]));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+
+  if (rows.length === 0) {
+    return res.status(400).json({ message: 'No slot/date combinations to block' });
+  }
+
+  // INSERT IGNORE skips pairs that already exist (idempotent)
+  const placeholders = rows.map(() => '(?, ?, ?)').join(', ');
+  const params = rows.flat();
+
+  db.run(
+    `INSERT IGNORE INTO slot_blocks (slot_id, block_date, reason) VALUES ${placeholders}`,
+    params,
+    function (err) {
+      if (err) {
+        return res.status(500).json({ message: 'Failed to create slot blocks', error: err.message });
+      }
+      res.json({
+        message: `Blocked ${this.changes} slot/date combination(s)`,
+        blocked: this.changes,
+        skipped: rows.length - this.changes
+      });
+    }
+  );
+});
+
+/**
+ * GET /api/admin/slot-blocks
+ * Lists blocks. Optional query params: ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&slot_id=N
+ * Returns rows joined with slot info for easier display.
+ */
+app.get('/api/admin/slot-blocks', authenticateAdmin, (req, res) => {
+  const { start_date, end_date, slot_id } = req.query;
+
+  let conditions = [];
+  let params = [];
+
+  if (start_date) {
+    conditions.push('sb.block_date >= ?');
+    params.push(start_date);
+  }
+  if (end_date) {
+    conditions.push('sb.block_date <= ?');
+    params.push(end_date);
+  }
+  if (slot_id) {
+    conditions.push('sb.slot_id = ?');
+    params.push(slot_id);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  db.all(
+    `SELECT sb.id, sb.slot_id, sb.block_date, sb.reason, sb.created_at,
+            s.start_time, s.end_time, s.price
+     FROM slot_blocks sb
+     JOIN slots s ON sb.slot_id = s.id
+     ${where}
+     ORDER BY sb.block_date ASC, TIME(s.start_time) ASC`,
+    params,
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({ message: 'Failed to retrieve slot blocks', error: err.message });
+      }
+      res.json(rows);
+    }
+  );
+});
+
+/**
+ * DELETE /api/admin/slot-blocks/bulk
+ * Removes blocks for specific slot IDs across [start_date, end_date].
+ * Body: { slot_ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD' }
+ */
+app.delete('/api/admin/slot-blocks/bulk', authenticateAdmin, (req, res) => {
+  const { slot_ids, start_date, end_date } = req.body;
+
+  if (!slot_ids || !Array.isArray(slot_ids) || slot_ids.length === 0) {
+    return res.status(400).json({ message: 'slot_ids must be a non-empty array' });
+  }
+  if (!start_date || !end_date) {
+    return res.status(400).json({ message: 'start_date and end_date are required' });
+  }
+
+  const placeholders = slot_ids.map(() => '?').join(', ');
+  db.run(
+    `DELETE FROM slot_blocks WHERE slot_id IN (${placeholders}) AND block_date >= ? AND block_date <= ?`,
+    [...slot_ids, start_date, end_date],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ message: 'Failed to remove slot blocks', error: err.message });
+      }
+      res.json({ message: `Removed ${this.changes} block(s)`, removed: this.changes });
+    }
+  );
 });
 
 // 5. Admin Dashboard Statistics
