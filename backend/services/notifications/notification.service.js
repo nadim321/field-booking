@@ -58,10 +58,25 @@ async function dispatch(booking, templateFn, triggerLabel) {
   // Email (secondary channel) -- optional field, skip quietly if absent
   if (booking.customer_email) {
     try {
+      let attachments = [];
+      if (triggerLabel === 'booking_approved' || triggerLabel === 'advance_payment_confirmed') {
+        try {
+          const pdfService = require('../pdf/pdf.service');
+          const pdfBuffer = await pdfService.generateBookingSlipPDF(booking);
+          attachments.push({
+            filename: `booking_slip_${booking.id || booking.booking_id || 'receipt'}.pdf`,
+            content: pdfBuffer
+          });
+        } catch (pdfErr) {
+          console.error(`[NotificationService] Failed to generate PDF for attachment:`, pdfErr.message);
+        }
+      }
+
       const result = await emailProvider.activeProvider.send({
         to: booking.customer_email,
         subject: emailSubject,
-        message: emailMessage
+        message: emailMessage,
+        attachments
       });
       if (!result.success) {
         console.error(`[NotificationService] Email failed for "${triggerLabel}" (booking ${booking.id || booking.booking_id}):`, result.error);

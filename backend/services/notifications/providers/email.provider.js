@@ -17,11 +17,14 @@ const nodemailer = require('nodemailer');
  * or tests without hitting a real mail server.
  */
 class MockEmailProvider {
-  async send({ to, subject, message }) {
+  async send({ to, subject, message, attachments }) {
     console.log('--- [MOCK EMAIL] ---');
     console.log(`To: ${to}`);
     console.log(`Subject: ${subject}`);
     console.log(`Body: ${message}`);
+    if (attachments && attachments.length > 0) {
+      console.log(`Attachments: ${attachments.map(a => a.filename).join(', ')}`);
+    }
     console.log('--------------------');
     return { success: true, providerResponse: { mock: true } };
   }
@@ -70,7 +73,7 @@ class GmailSmtpProvider {
     return this._transporter;
   }
 
-  async send({ to, subject, message }) {
+  async send({ to, subject, message, attachments }) {
     if (!this.user || !this.pass) {
       console.error('[GmailSmtpProvider] Missing EMAIL_USER / EMAIL_PASS in environment. Falling back to no-op.');
       return { success: false, error: 'Email provider not configured' };
@@ -78,12 +81,16 @@ class GmailSmtpProvider {
 
     try {
       const transporter = this._getTransporter();
-      const info = await transporter.sendMail({
+      const mailOptions = {
         from: this.fromAddress,
         to,
         subject,
         text: message
-      });
+      };
+      if (attachments && attachments.length > 0) {
+        mailOptions.attachments = attachments;
+      }
+      const info = await transporter.sendMail(mailOptions);
       return { success: true, providerResponse: { messageId: info.messageId } };
     } catch (err) {
       console.error('[GmailSmtpProvider] Failed to send email:', err.message);

@@ -84,7 +84,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   // One shared view with a state-driven outcome, rather than separate
   // pages, since all outcomes need the same booking summary card and only
   // the headline/actions differ.
-  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | null = null;
+  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | 'requested' | null = null;
   paymentResultBooking: {
     booking_id: number;
     booking_date: string;
@@ -409,6 +409,18 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
           this.openPaymentConfirm(res.booking_id);
         } else {
           this.showToast('Booking requested successfully! Pending admin approval.', 'success');
+          this.paymentResultOutcome = 'requested';
+          this.paymentResultBookingId = res.booking_id;
+          this.paymentResultLoading = true;
+          this.apiService.getBookingResult(res.booking_id).subscribe({
+            next: (bookingRes) => {
+              this.paymentResultLoading = false;
+              this.paymentResultBooking = bookingRes;
+            },
+            error: () => {
+              this.paymentResultLoading = false;
+            }
+          });
         }
       },
       error: (err) => {
@@ -486,5 +498,24 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
       this.toastMsg = '';
       this.toastType = '';
     }, 4000);
+  }
+
+  downloadBookingSlip(bookingId: number): void {
+    if (!bookingId) return;
+    this.apiService.downloadBookingSlipPdf(bookingId).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `booking_slip_${bookingId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.showToast('Failed to download booking slip PDF.', 'error');
+      }
+    });
   }
 }

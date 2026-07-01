@@ -130,6 +130,38 @@ app.get('/api/bookings/:id/result', (req, res) => {
   );
 });
 
+// 2b. Download booking slip as a PDF.
+app.get('/api/bookings/:id/pdf', (req, res) => {
+  const { id } = req.params;
+
+  db.get(
+    `SELECT b.*, s.start_time, s.end_time, s.price
+     FROM bookings b
+     JOIN slots s ON b.slot_id = s.id
+     WHERE b.id = ?`,
+    [id],
+    async (err, booking) => {
+      if (err) {
+        return res.status(500).json({ message: 'Database error', error: err.message });
+      }
+      if (!booking) {
+        return res.status(404).json({ message: 'Booking not found' });
+      }
+
+      try {
+        const pdfService = require('./services/pdf/pdf.service');
+        const pdfBuffer = await pdfService.generateBookingSlipPDF(booking);
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=booking_slip_${id}.pdf`);
+        res.send(pdfBuffer);
+      } catch (pdfErr) {
+        res.status(500).json({ message: 'Failed to generate PDF', error: pdfErr.message });
+      }
+    }
+  );
+});
+
 // 3. Get Available Slots for a Specific Date
 app.get('/api/slots/available', (req, res) => {
   const { date } = req.query;

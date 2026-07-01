@@ -298,4 +298,11 @@ export class ApiService {
       body: data
     });
   }
+
+  /** Downloads a booking slip PDF by booking ID. */
+  downloadBookingSlipPdf(bookingId: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/bookings/${bookingId}/pdf`, {
+      responseType: 'blob'
+    });
+  }
 }
