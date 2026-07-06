@@ -151,7 +151,7 @@ app.get('/api/bookings/:id/pdf', (req, res) => {
       try {
         const pdfService = require('./services/pdf/pdf.service');
         const pdfBuffer = await pdfService.generateBookingSlipPDF(booking);
-        
+
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=booking_slip_${id}.pdf`);
         res.send(pdfBuffer);
@@ -1561,29 +1561,102 @@ app.post('/api/payments/cancel', express.urlencoded({ extended: true }), async (
 // 4. Admin settings: read/update the advance payment percentage.
 app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
   try {
-    const percentage = await settingsService.getAdvancePaymentPercentage();
-    res.json({ advance_payment_percentage: percentage });
+
+    res.json({
+      advance_payment_percentage: await settingsService.getAdvancePaymentPercentage(),
+      turf_name: await settingsService.getSetting('turf_name'),
+      turf_address: await settingsService.getSetting('turf_address'),
+      turf_phone: await settingsService.getSetting('turf_phone'),
+      turf_email: await settingsService.getSetting('turf_email')
+    });
+
   } catch (err) {
-    res.status(500).json({ message: 'Failed to load settings', error: err.message });
+    res.status(500).json({
+      message: 'Failed to load settings',
+      error: err.message
+    });
   }
 });
 
 app.put('/api/admin/settings', authenticateAdmin, async (req, res) => {
-  const { advance_payment_percentage } = req.body;
-  if (advance_payment_percentage === undefined) {
-    return res.status(400).json({ message: 'advance_payment_percentage is required' });
-  }
-  const parsed = parseFloat(advance_payment_percentage);
-  if (isNaN(parsed) || parsed <= 0 || parsed > 100) {
-    return res.status(400).json({ message: 'advance_payment_percentage must be a number between 0 and 100' });
-  }
+
+  const {
+    advance_payment_percentage,
+    turf_name,
+    turf_address,
+    turf_phone,
+    turf_email
+  } = req.body;
 
   try {
-    await settingsService.setSetting('advance_payment_percentage', parsed);
-    res.json({ message: 'Settings updated', advance_payment_percentage: parsed });
+
+    if (advance_payment_percentage !== undefined) {
+
+      const parsed = parseFloat(advance_payment_percentage);
+
+      if (isNaN(parsed) || parsed <= 0 || parsed > 100) {
+        return res.status(400).json({
+          message: 'advance_payment_percentage must be between 0 and 100'
+        });
+      }
+
+      await settingsService.setSetting(
+        'advance_payment_percentage',
+        parsed
+      );
+    }
+
+    if (turf_name !== undefined)
+      await settingsService.setSetting('turf_name', turf_name);
+
+    if (turf_address !== undefined)
+      await settingsService.setSetting('turf_address', turf_address);
+
+    if (turf_phone !== undefined)
+      await settingsService.setSetting('turf_phone', turf_phone);
+
+    if (turf_email !== undefined)
+      await settingsService.setSetting('turf_email', turf_email);
+
+    res.json({
+      message: 'Settings updated successfully'
+    });
+
   } catch (err) {
-    res.status(500).json({ message: 'Failed to update settings', error: err.message });
+
+    res.status(500).json({
+      message: 'Failed to update settings',
+      error: err.message
+    });
+
   }
+
+});
+
+app.get('/api/settings/public', async (req, res) => {
+
+  try {
+
+    res.json({
+
+      turf_name: await settingsService.getSetting('turf_name'),
+      turf_address: await settingsService.getSetting('turf_address'),
+      turf_phone: await settingsService.getSetting('turf_phone'),
+      turf_email: await settingsService.getSetting('turf_email'),
+
+      advance_payment_percentage:
+        await settingsService.getAdvancePaymentPercentage()
+
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      message: err.message
+    });
+
+  }
+
 });
 
 

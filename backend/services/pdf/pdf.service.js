@@ -1,183 +1,427 @@
 const PDFDocument = require('pdfkit');
+const settingsService = require('../settings.service');
 
-/**
- * Generates a clean, professional booking slip PDF.
- * Returns a Promise that resolves to a Buffer.
- * 
- * @param {object} booking Booking data including slot times
- * @returns {Promise<Buffer>}
- */
-function generateBookingSlipPDF(booking) {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ size: 'A6', margin: 25 });
-      const buffers = [];
+const PRIMARY = '#10b981';
+const TEXT = '#1e293b';
+const MUTED = '#64748b';
+const BORDER = '#e2e8f0';
+const BG = '#f8fafc';
 
-      doc.on('data', (chunk) => buffers.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(buffers)));
-      doc.on('error', (err) => reject(err));
+function money(value) {
+   return `BDT ${Number(value || 0).toFixed(2)}`;
+}
 
-      // Brand Color
-      const primaryColor = '#10b981'; // Emerald Green
-      const textColor = '#1e293b'; // Slate 800
-      const mutedColor = '#64748b'; // Slate 500
+function drawCard(doc, title) {
 
-      // Header Banner
-      doc.rect(0, 0, doc.page.width, 10)
-         .fill(primaryColor);
+   const startY = doc.y;
 
-      // Title & Branding
-      doc.fillColor(primaryColor)
-         .font('Helvetica-Bold')
-         .fontSize(16)
-         .text('KICKOFF ARENA', 25, 25);
+   doc.font('Helvetica-Bold')
+      .fontSize(8)
+      .fillColor(TEXT)
+      .text(title, 35, startY + 8);
 
-      doc.fillColor(textColor)
-         .fontSize(9)
-         .font('Helvetica')
-         .text('Premium Football Turf Booking Slip', 25, 43);
+   doc.y = startY + 22;
 
-      // Divider Line
-      doc.moveTo(25, 58)
-         .lineTo(doc.page.width - 25, 58)
-         .strokeColor('#cbd5e1')
-         .lineWidth(1)
-         .stroke();
+   return startY;
+}
 
-      // Booking ID and Date
-      doc.fillColor(textColor)
-         .font('Helvetica-Bold')
-         .fontSize(8)
-         .text(`BOOKING REF: #${booking.id || booking.booking_id || 'N/A'}`, 25, 68);
+function finishCard(doc, startY) {
 
-      const createdDate = booking.created_at 
-        ? new Date(booking.created_at).toLocaleDateString('en-US', { dateStyle: 'medium' }) 
-        : new Date().toLocaleDateString('en-US', { dateStyle: 'medium' });
-      
-      doc.font('Helvetica')
-         .fillColor(mutedColor)
-         .text(`Issued: ${createdDate}`, doc.page.width - 120, 68, { width: 95, align: 'right' });
+   const endY = doc.y + 3;
 
-      // Customer Information Panel
-      doc.rect(25, 83, doc.page.width - 50, 42)
-         .fill('#f8fafc')
-         .strokeColor('#e2e8f0')
-         .lineWidth(0.5)
-         .stroke();
+   doc.save();
 
-      doc.fillColor(textColor)
-         .font('Helvetica-Bold')
-         .fontSize(8)
-         .text('CUSTOMER INFORMATION', 32, 90);
+   doc.roundedRect(
+      25,
+      startY,
+      doc.page.width - 50,
+      endY - startY,
+      5
+   );
 
-      doc.font('Helvetica')
-         .fontSize(8)
-         .fillColor(textColor)
-         .text(`Name: ${booking.customer_name}`, 32, 102)
-         .text(`Phone: ${booking.customer_phone}`, 32, 112);
+   // Draw only border
+   doc.strokeColor(BORDER)
+      .lineWidth(1)
+      .stroke();
 
-      if (booking.team_name) {
-        doc.text(`Team: ${booking.team_name}`, doc.page.width / 2 + 10, 102);
+   doc.restore();
+
+   doc.moveDown(.3);
+}
+
+function row(doc, label, value, color = TEXT) {
+
+   const startY = doc.y;
+
+   const labelHeight = doc.heightOfString(label, {
+      width: 75
+   });
+
+   const valueHeight = doc.heightOfString(value || '-', {
+      width: doc.page.width - 150
+   });
+
+   const rowHeight = Math.max(labelHeight, valueHeight);
+
+   doc.fillColor(TEXT)
+      .font('Helvetica')
+      .fontSize(8)
+      .text(label, 35, startY, {
+         width: 75
+      });
+
+   doc.fillColor(color)
+      .font('Helvetica-Bold')
+      .text(value || '-', 120, startY, {
+         width: doc.page.width - 150
+      });
+
+   doc.y = startY + rowHeight + 5;
+}
+
+async function drawHeader(doc) {
+
+   const turfName =
+      await settingsService.getSetting('turf_name') ||
+      'KICKOFF ARENA';
+
+   const turfAddress =
+      await settingsService.getSetting('turf_address') ||
+      '';
+
+   const turfPhone =
+      await settingsService.getSetting('turf_phone') ||
+      '';
+
+   const turfEmail =
+      await settingsService.getSetting('turf_email') ||
+      '';
+
+   doc.rect(0, 0, doc.page.width, 8)
+      .fill(PRIMARY);
+
+   doc.moveDown(.5);
+
+   doc.fillColor(PRIMARY)
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text(turfName, {
+         align: 'center'
+      });
+
+   doc.fillColor(TEXT)
+      .fontSize(8)
+      .font('Helvetica')
+      .text(
+         'Premium Football Turf Booking Slip',
+         {
+            align: 'center'
+         }
+      );
+
+   doc.moveDown(.4);
+
+   doc.fillColor(MUTED)
+      .fontSize(6);
+
+   if (turfAddress)
+      doc.text(turfAddress, {
+         align: 'center'
+      });
+
+   if (turfPhone)
+      doc.text(`Phone: ${turfPhone}`, {
+         align: 'center'
+      });
+
+   if (turfEmail)
+      doc.text(`Email: ${turfEmail}`, {
+         align: 'center'
+      });
+
+   doc.moveDown(.2);
+
+   doc.moveTo(25, doc.y)
+      .lineTo(doc.page.width - 25, doc.y)
+      .strokeColor(BORDER)
+      .lineWidth(1)
+      .stroke();
+
+   doc.moveDown(.2);
+}
+
+
+async function generateBookingSlipPDF(booking) {
+
+   return new Promise(async (resolve, reject) => {
+
+      try {
+
+         const doc = new PDFDocument({
+            size: 'A6',
+            margin: 15
+         });
+
+         const buffers = [];
+
+         doc.on('data', chunk => buffers.push(chunk));
+         doc.on('end', () => resolve(Buffer.concat(buffers)));
+         doc.on('error', reject);
+
+         await drawHeader(doc);
+
+         //----------------------------------------------------
+         // Booking Reference
+         //----------------------------------------------------
+
+         const createdDate = booking.created_at
+            ? new Date(booking.created_at).toLocaleDateString(
+               'en-US',
+               { dateStyle: 'medium' }
+            )
+            : new Date().toLocaleDateString(
+               'en-US',
+               { dateStyle: 'medium' }
+            );
+
+         doc.font('Helvetica-Bold')
+            .fontSize(8)
+            .fillColor(TEXT)
+            .text(
+               `BOOKING REF : #${booking.id || booking.booking_id || 'N/A'}`
+            );
+
+         doc.font('Helvetica')
+            .fillColor(MUTED)
+            .fontSize(7)
+            .text(`Issued : ${createdDate}`);
+
+         doc.moveDown(.2);
+
+         //----------------------------------------------------
+         // Customer Card
+         //----------------------------------------------------
+
+         const customerCard = drawCard(
+            doc,
+            'CUSTOMER INFORMATION'
+         );
+
+         row(
+            doc,
+            'Name',
+            booking.customer_name
+         );
+
+         row(
+            doc,
+            'Phone',
+            booking.customer_phone
+         );
+
+         if (booking.customer_email) {
+
+            row(
+               doc,
+               'Email',
+               booking.customer_email
+            );
+
+         }
+
+         if (booking.team_name) {
+
+            row(
+               doc,
+               'Team',
+               booking.team_name
+            );
+
+         }
+
+         finishCard(doc, customerCard);
+
+         //----------------------------------------------------
+         // Schedule Card
+         //----------------------------------------------------
+
+         const scheduleCard = drawCard(
+            doc,
+            'SCHEDULE'
+         );
+
+         const playDate = booking.booking_date
+            ? new Date(
+               booking.booking_date
+            ).toLocaleDateString(
+               'en-US',
+               {
+                  dateStyle: 'full'
+               }
+            )
+            : '-';
+
+         row(
+            doc,
+            'Date',
+            playDate
+         );
+
+         row(
+            doc,
+            'Time',
+            `${booking.start_time || '-'} - ${booking.end_time || '-'}`
+         );
+
+         finishCard(
+            doc,
+            scheduleCard
+         );
+
+         //----------------------------------------------------
+         // Payment Summary
+         //----------------------------------------------------
+
+         const paymentCard = drawCard(
+            doc,
+            'PAYMENT SUMMARY'
+         );
+
+         const total = Number(booking.price || 0);
+         const paid = Number(booking.amount_paid || 0);
+         const due = Math.max(0, total - paid);
+
+         row(
+            doc,
+            'Total Charge',
+            money(total)
+         );
+
+         row(
+            doc,
+            'Amount Paid',
+            money(paid)
+         );
+
+         row(
+            doc,
+            'Balance Due',
+            money(due),
+            due > 0 ? '#f59e0b' : PRIMARY
+         );
+
+         row(
+            doc,
+            'Status',
+            (booking.payment_status || 'UNPAID').toUpperCase(),
+            (booking.payment_status || '').toLowerCase() === 'paid'
+               ? PRIMARY
+               : '#f59e0b'
+         );
+
+         if (booking.payment_method) {
+
+            doc.moveDown(.2);
+
+            doc.font('Helvetica')
+               .fontSize(7)
+               .fillColor(MUTED)
+               .text(
+                  `Payment Method : ${booking.payment_method}`
+               );
+
+         }
+
+         if (booking.transaction_id) {
+
+            doc.font('Helvetica')
+               .fontSize(7)
+               .fillColor(MUTED)
+               .text(
+                  `Transaction ID : ${booking.transaction_id}`
+               );
+
+         }
+
+         finishCard(doc, paymentCard);
+
+         //----------------------------------------------------
+         // Instructions
+         //----------------------------------------------------
+
+         doc.moveDown(.5);
+
+         doc.font('Helvetica-Bold')
+            .fontSize(7)
+            .fillColor(TEXT)
+            .text('IMPORTANT INSTRUCTIONS');
+
+         doc.moveDown(.5);
+
+         const rules = [
+            'Please arrive at least 10 minutes before your booking.',
+            'Only turf shoes or indoor flats are allowed.',
+            'Extensions are subject to slot availability.',
+            'Management reserves the right to cancel bookings due to unavoidable circumstances.'
+         ];
+
+         doc.font('Helvetica')
+            .fontSize(6.5)
+            .fillColor(MUTED);
+
+         rules.forEach(rule => {
+            doc.text(`• ${rule}`);
+         });
+
+         //----------------------------------------------------
+         // Footer
+         //----------------------------------------------------
+
+         doc.moveDown(.5);
+
+         doc.moveTo(25, doc.y)
+            .lineTo(doc.page.width - 25, doc.y)
+            .strokeColor(BORDER)
+            .stroke();
+
+         doc.moveDown(.5);
+
+         doc.fillColor(PRIMARY)
+            .font('Helvetica-Bold')
+            .fontSize(9)
+            .text(
+               'THANK YOU FOR PLAYING!',
+               {
+                  align: 'center'
+               }
+            );
+
+         doc.moveDown(.2);
+
+         doc.font('Helvetica')
+            .fillColor(MUTED)
+            .fontSize(6.5)
+            .text(
+               'We look forward to seeing you again.',
+               {
+                  align: 'center'
+               }
+            );
+
+         doc.end();
+
+      } catch (err) {
+
+         reject(err);
+
       }
-      if (booking.customer_email) {
-        doc.text(`Email: ${booking.customer_email}`, doc.page.width / 2 + 10, 112);
-      }
 
-      // Slot Details Panel
-      doc.rect(25, 133, doc.page.width - 50, 42)
-         .fill('#f8fafc')
-         .strokeColor('#e2e8f0')
-         .lineWidth(0.5)
-         .stroke();
+   });
 
-      doc.fillColor(textColor)
-         .font('Helvetica-Bold')
-         .fontSize(8)
-         .text('SCHEDULE & TIMING', 32, 140);
-
-      // Playing Date formatted nicely
-      const playDate = booking.booking_date
-        ? new Date(booking.booking_date).toLocaleDateString('en-US', { dateStyle: 'long' })
-        : 'N/A';
-
-      doc.font('Helvetica')
-         .fontSize(8)
-         .fillColor(textColor)
-         .text(`Date: ${playDate}`, 32, 152)
-         .text(`Time Slot: ${booking.start_time || 'N/A'} - ${booking.end_time || 'N/A'}`, 32, 162);
-
-      // Payment Summary Panel
-      doc.rect(25, 183, doc.page.width - 50, 72)
-         .fill('#f8fafc')
-         .strokeColor('#e2e8f0')
-         .lineWidth(0.5)
-         .stroke();
-
-      doc.fillColor(textColor)
-         .font('Helvetica-Bold')
-         .fontSize(8)
-         .text('PAYMENT SUMMARY', 32, 190);
-
-      // Calculate balance due
-      const price = parseFloat(booking.price || 0);
-      const paid = parseFloat(booking.amount_paid || 0);
-      const due = Math.max(0, price - paid);
-
-      doc.font('Helvetica')
-         .fontSize(8)
-         .fillColor(textColor)
-         .text(`Total Charge:`, 32, 203)
-         .text(`Amount Paid:`, 32, 213)
-         .text(`Balance Due:`, 32, 223)
-         .text(`Payment Status:`, 32, 233);
-
-      doc.font('Helvetica-Bold')
-         .text(`BDT ${price.toFixed(2)}`, 110, 203)
-         .text(`BDT ${paid.toFixed(2)}`, 110, 213)
-         .fillColor(due > 0 ? '#f59e0b' : '#10b981')
-         .text(`BDT ${due.toFixed(2)}`, 110, 223);
-
-      const statusText = (booking.payment_status || 'unpaid').toUpperCase();
-      doc.fillColor(statusText === 'PAID' ? '#10b981' : '#f59e0b')
-         .text(statusText, 110, 233);
-
-      // Payment method details if exists
-      if (booking.payment_method || booking.transaction_id) {
-        doc.font('Helvetica')
-           .fontSize(7)
-           .fillColor(mutedColor);
-
-        let detailsStr = '';
-        if (booking.payment_method) detailsStr += `Method: ${booking.payment_method}`;
-        if (booking.transaction_id) detailsStr += ` | Txn ID: ${booking.transaction_id}`;
-        doc.text(detailsStr, 32, 245, { width: doc.page.width - 64 });
-      }
-
-      // Rules / Footer
-      doc.fillColor(mutedColor)
-         .font('Helvetica')
-         .fontSize(6.5)
-         .text('IMPORTANT INSTRUCTIONS:', 25, 265);
-
-      doc.fontSize(6)
-         .text('1. Please arrive at least 10 minutes prior to your booking start time.', 25, 274)
-         .text('2. Only turf or indoor flats shoes are permitted. Spikes/studs are strictly prohibited.', 25, 282)
-         .text('3. Respect the schedule. Extensions are subject to slot availability.', 25, 290)
-         .text('4. Booking is subject to our terms of service and turf policy.', 25, 298);
-
-      // Center Thank You note
-      doc.fillColor(primaryColor)
-         .font('Helvetica-Bold')
-         .fontSize(8)
-         .text('THANK YOU FOR PLAYING!', 25, 315, { align: 'center', width: doc.page.width - 50 });
-
-      doc.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
 }
 
 module.exports = {
-  generateBookingSlipPDF
+   generateBookingSlipPDF
 };
+
+

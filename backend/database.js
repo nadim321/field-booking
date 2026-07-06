@@ -250,13 +250,13 @@ function initializePool() {
                   return;
                 }
 
-              // slot_blocks: Admin-created blocks for specific slot + date
-              // combinations (e.g. maintenance, tournament, holiday).
-              // Unlike slot_holds (temporary customer holds), these are
-              // permanent until explicitly removed by an admin action.
-              // A block takes priority over any hold or availability check
-              // in GET /api/slots/available.
-              dbWrapper.run(`
+                // slot_blocks: Admin-created blocks for specific slot + date
+                // combinations (e.g. maintenance, tournament, holiday).
+                // Unlike slot_holds (temporary customer holds), these are
+                // permanent until explicitly removed by an admin action.
+                // A block takes priority over any hold or availability check
+                // in GET /api/slots/available.
+                dbWrapper.run(`
                 CREATE TABLE IF NOT EXISTS slot_blocks (
                   id INT AUTO_INCREMENT PRIMARY KEY,
                   slot_id INT NOT NULL,
@@ -268,13 +268,13 @@ function initializePool() {
                   INDEX idx_block_date (block_date)
                 ) ENGINE=InnoDB
               `, [], (err) => {
-                if (err) {
-                  console.error("Error creating slot_blocks table:", err.message);
-                  return;
-                }
-                seedData();
+                  if (err) {
+                    console.error("Error creating slot_blocks table:", err.message);
+                    return;
+                  }
+                  seedData();
+                });
               });
-            });
             });
           });
 
@@ -295,13 +295,25 @@ function seedData() {
     const count = row ? (row.count || 0) : 0;
     if (count === 0) {
       dbWrapper.run(
-        "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
-        ['advance_payment_percentage', '25'],
+        `INSERT INTO app_settings (setting_key, setting_value)
+      VALUES
+      (?, ?),
+      (?, ?),
+      (?, ?),
+      (?, ?),
+      (?, ?)`,
+        [
+          'advance_payment_percentage', '25',
+          'turf_name', 'Dream Turf',
+          'turf_address', 'Dhaka, Bangladesh',
+          'turf_phone', '01700000000',
+          'turf_email', 'info@dreamturf.com'
+        ],
         (err) => {
           if (err) {
             console.error("Error seeding default app settings:", err.message);
           } else {
-            console.log("Default app settings seeded (advance_payment_percentage=25).");
+            console.log("Default app settings seeded successfully.");
           }
         }
       );
