@@ -106,8 +106,12 @@ export class AdminDashboardComponent implements OnInit {
   slotIsActive = 1;
   slotCategory: number | null = null; // null = "Uncategorized", admin always picks manually
 
-  // Payment settings (advance payment percentage)
+  // Payment and Turf settings
   advancePaymentPercentage: number = 25;
+  turfName: string = '';
+  turfAddress: string = '';
+  turfPhone: string = '';
+  turfEmail: string = '';
   settingsLoading = false;
 
   // --- Bulk Slot Blocking ---
@@ -198,6 +202,10 @@ export class AdminDashboardComponent implements OnInit {
     this.apiService.getSettings().subscribe({
       next: (res) => {
         this.advancePaymentPercentage = res.advance_payment_percentage;
+        this.turfName = res.turf_name || '';
+        this.turfAddress = res.turf_address || '';
+        this.turfPhone = res.turf_phone || '';
+        this.turfEmail = res.turf_email || '';
       },
       error: (err) => {
         this.handleError(err);
@@ -205,16 +213,25 @@ export class AdminDashboardComponent implements OnInit {
     });
   }
 
-  saveAdvancePaymentPercentage(): void {
+  saveSettings(): void {
     if (this.advancePaymentPercentage <= 0 || this.advancePaymentPercentage > 100) {
       this.showToast('Percentage must be between 1 and 100', 'error');
       return;
     }
     this.settingsLoading = true;
-    this.apiService.updateSettings({ advance_payment_percentage: this.advancePaymentPercentage }).subscribe({
+    
+    const settingsPayload = {
+      advance_payment_percentage: this.advancePaymentPercentage,
+      turf_name: this.turfName,
+      turf_address: this.turfAddress,
+      turf_phone: this.turfPhone,
+      turf_email: this.turfEmail
+    };
+
+    this.apiService.updateSettings(settingsPayload).subscribe({
       next: () => {
         this.settingsLoading = false;
-        this.showToast('Advance payment percentage updated', 'success');
+        this.showToast('Settings updated successfully', 'success');
       },
       error: (err) => {
         this.settingsLoading = false;

@@ -18,64 +18,64 @@ function formatSlotLine(booking) {
   return `${booking.booking_date || ''} (${time})`.trim();
 }
 
-function bookingCreated(booking) {
+function bookingCreated(booking, turfName) {
   const slotLine = formatSlotLine(booking);
   const seasonNote = booking.recurring_booking_id
     ? ' (part of your season booking)'
     : '';
   return {
-    smsMessage: `Hi ${booking.customer_name}, your turf booking request for ${slotLine}${seasonNote} has been received and is pending admin approval. - Kickoff Arena`,
-    emailSubject: 'Booking Request Received - Kickoff Arena',
+    smsMessage: `Hi ${booking.customer_name}, your turf booking request for ${slotLine}${seasonNote} has been received and is pending admin approval. - ${turfName}`,
+    emailSubject: `Booking Request Received - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `We've received your turf booking request for ${slotLine}${seasonNote}.\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n` +
       `Status: Pending admin approval\n\n` +
       `We'll notify you as soon as it's approved.\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
-function bookingApproved(booking) {
+function bookingApproved(booking, turfName) {
   const slotLine = formatSlotLine(booking);
   return {
-    smsMessage: `Good news ${booking.customer_name}! Your turf booking for ${slotLine} is CONFIRMED. See you on the pitch! - Kickoff Arena`,
-    emailSubject: 'Booking Confirmed - Kickoff Arena',
+    smsMessage: `Good news ${booking.customer_name}! Your turf booking for ${slotLine} is CONFIRMED. See you on the pitch! - ${turfName}`,
+    emailSubject: `Booking Confirmed - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `Your turf booking for ${slotLine} has been approved and confirmed.\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n\n` +
       `See you on the pitch!\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
-function bookingCancelled(booking) {
+function bookingCancelled(booking, turfName) {
   const slotLine = formatSlotLine(booking);
   return {
-    smsMessage: `Hi ${booking.customer_name}, your turf booking for ${slotLine} has been CANCELLED. Contact us if this is unexpected. - Kickoff Arena`,
-    emailSubject: 'Booking Cancelled - Kickoff Arena',
+    smsMessage: `Hi ${booking.customer_name}, your turf booking for ${slotLine} has been CANCELLED. Contact us if this is unexpected. - ${turfName}`,
+    emailSubject: `Booking Cancelled - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `Your turf booking for ${slotLine} has been cancelled.\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n\n` +
       `If you didn't request this or believe it's a mistake, please contact us.\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
-function paymentReceived(booking) {
+function paymentReceived(booking, turfName) {
   const slotLine = formatSlotLine(booking);
   const amountLine = booking.price ? ` Amount: BDT ${booking.price}.` : '';
   return {
-    smsMessage: `Payment received for your turf booking on ${slotLine}.${amountLine} Thank you! - Kickoff Arena`,
-    emailSubject: 'Payment Received - Kickoff Arena',
+    smsMessage: `Payment received for your turf booking on ${slotLine}.${amountLine} Thank you! - ${turfName}`,
+    emailSubject: `Payment Received - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `We've received your payment for the turf booking on ${slotLine}.${amountLine}\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n\n` +
       `Thank you for booking with us!\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
@@ -85,7 +85,7 @@ function paymentReceived(booking) {
  * template above, which was written for the old mock-payment flow and is
  * kept only for backward compatibility).
  */
-function advancePaymentConfirmed(booking) {
+function advancePaymentConfirmed(booking, turfName) {
   const slotLine = formatSlotLine(booking);
   const balanceDue = booking.price && booking.amount_paid
     ? (parseFloat(booking.price) - parseFloat(booking.amount_paid))
@@ -94,8 +94,8 @@ function advancePaymentConfirmed(booking) {
     ? ` Remaining balance of BDT ${balanceDue.toFixed(2)} is due at the turf.`
     : '';
   return {
-    smsMessage: `Hi ${booking.customer_name}, your advance payment was received and your turf booking for ${slotLine} is CONFIRMED.${balanceLine} - Kickoff Arena`,
-    emailSubject: 'Booking Confirmed - Advance Payment Received - Kickoff Arena',
+    smsMessage: `Hi ${booking.customer_name}, your advance payment was received and your turf booking for ${slotLine} is CONFIRMED.${balanceLine} - ${turfName}`,
+    emailSubject: `Booking Confirmed - Advance Payment Received - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `We've received your advance payment and your turf booking for ${slotLine} is now CONFIRMED.\n` +
@@ -103,7 +103,7 @@ function advancePaymentConfirmed(booking) {
       `Amount paid: BDT ${booking.amount_paid}\n` +
       (balanceDue && balanceDue > 0 ? `Remaining balance (due at the turf): BDT ${balanceDue.toFixed(2)}\n` : '') +
       `\nSee you on the pitch!\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
@@ -111,42 +111,39 @@ function advancePaymentConfirmed(booking) {
  * Sent when a payment attempt failed or was cancelled (the booking stays
  * pending; this just keeps the customer informed of what happened).
  */
-function paymentFailed(booking, reason) {
+function paymentFailed(booking, reason, turfName) {
   const slotLine = formatSlotLine(booking);
   return {
-    smsMessage: `Hi ${booking.customer_name}, your payment attempt for the turf booking on ${slotLine} was ${reason}. Your booking is still pending -- please try again or contact us. - Kickoff Arena`,
-    emailSubject: 'Payment Not Completed - Kickoff Arena',
+    smsMessage: `Hi ${booking.customer_name}, your payment attempt for the turf booking on ${slotLine} was ${reason}. Your booking is still pending -- please try again or contact us. - ${turfName}`,
+    emailSubject: `Payment Not Completed - ${turfName}`,
     emailMessage:
       `Hi ${booking.customer_name},\n\n` +
       `Your payment attempt for the turf booking on ${slotLine} was ${reason}.\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n` +
       `Your booking is still pending -- please try the payment again, or contact us if you'd like to arrange payment another way.\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
-
 
 /**
  * Sent to the SEASON CUSTOMER when the weekly generation job could not
  * create their booking for a particular week because a one-off booking
  * already took that slot/date first.
- * `recurringBooking` is a recurring_bookings row; `conflictDate` is the
- * specific YYYY-MM-DD that was skipped.
  */
-function recurringConflict(recurringBooking, conflictDate) {
+function recurringConflict(recurringBooking, conflictDate, turfName) {
   const slotLine = recurringBooking.start_time && recurringBooking.end_time
     ? `${conflictDate} (${recurringBooking.start_time} - ${recurringBooking.end_time})`
     : conflictDate;
   return {
-    smsMessage: `Hi ${recurringBooking.customer_name}, unfortunately your season booking slot for ${slotLine} was already taken by another booking this week. Please contact us. - Kickoff Arena`,
-    emailSubject: 'Season Booking - Slot Unavailable This Week - Kickoff Arena',
+    smsMessage: `Hi ${recurringBooking.customer_name}, unfortunately your season booking slot for ${slotLine} was already taken by another booking this week. Please contact us. - ${turfName}`,
+    emailSubject: `Season Booking - Slot Unavailable This Week - ${turfName}`,
     emailMessage:
       `Hi ${recurringBooking.customer_name},\n\n` +
       `We're sorry, but your season booking slot for ${slotLine} could not be reserved this week ` +
       `because it was already booked by someone else before our system could reserve it for you.\n\n` +
       `Your season booking for other weeks is not affected.\n` +
       `Please contact us if you'd like to arrange an alternative time for this week.\n\n` +
-      `- Kickoff Arena`
+      `- ${turfName}`
   };
 }
 
@@ -155,7 +152,7 @@ function recurringConflict(recurringBooking, conflictDate) {
  * conflict event as recurringConflict() above, so they're aware and can
  * manually resolve it with the customer if needed.
  */
-function recurringConflictAdminAlert(recurringBooking, conflictDate) {
+function recurringConflictAdminAlert(recurringBooking, conflictDate, turfName) {
   const slotLine = recurringBooking.start_time && recurringBooking.end_time
     ? `${conflictDate} (${recurringBooking.start_time} - ${recurringBooking.end_time})`
     : conflictDate;
@@ -177,7 +174,7 @@ function recurringConflictAdminAlert(recurringBooking, conflictDate) {
  * Sent to the ADMIN when a customer submits a new self-serve season
  * booking request, so the admin knows to check the approval queue.
  */
-function recurringRequestSubmitted(recurringBooking) {
+function recurringRequestSubmitted(recurringBooking, turfName) {
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayName = dayNames[recurringBooking.day_of_week] || `day ${recurringBooking.day_of_week}`;
   return {

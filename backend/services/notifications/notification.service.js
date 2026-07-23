@@ -21,6 +21,7 @@
 const smsProvider = require('./providers/sms.provider');
 const emailProvider = require('./providers/email.provider');
 const templates = require('./templates');
+const settingsService = require('../settings.service');
 
 /**
  * Sends both channels for a given template result, logging outcomes.
@@ -29,8 +30,15 @@ const templates = require('./templates');
  */
 async function dispatch(booking, templateFn, triggerLabel) {
   let content;
+  let turfName = 'KICKOFF ARENA'; // Fallback
   try {
-    content = templateFn(booking);
+    turfName = await settingsService.getSetting('turf_name') || 'KICKOFF ARENA';
+  } catch (err) {
+    console.warn(`[NotificationService] Failed to load turf_name for ${triggerLabel}, using fallback.`);
+  }
+
+  try {
+    content = templateFn(booking, turfName);
   } catch (err) {
     console.error(`[NotificationService] Failed to build template for "${triggerLabel}":`, err.message);
     return;
@@ -115,7 +123,7 @@ function notifyAdvancePaymentConfirmed(booking) {
 /** Trigger: a payment attempt failed/was cancelled/expired. `reason` is a
  * short human-readable word/phrase (e.g. "declined", "cancelled", "timed out"). */
 function notifyPaymentFailed(booking, reason) {
-  return dispatch(booking, (b) => templates.paymentFailed(b, reason), 'payment_failed');
+  return dispatch(booking, (b, tName) => templates.paymentFailed(b, reason, tName), 'payment_failed');
 }
 
 /**
@@ -133,7 +141,7 @@ function notifyPaymentFailed(booking, reason) {
 function notifyRecurringConflict(recurringBooking, conflictDate) {
   return dispatch(
     recurringBooking,
-    (rb) => templates.recurringConflict(rb, conflictDate),
+    (rb, tName) => templates.recurringConflict(rb, conflictDate, tName),
     'recurring_conflict_customer'
   );
 }
@@ -150,8 +158,15 @@ function notifyRecurringConflict(recurringBooking, conflictDate) {
  */
 async function dispatchAdminEmail(templateFn, args, triggerLabel) {
   let content;
+  let turfName = 'KICKOFF ARENA'; // Fallback
   try {
-    content = templateFn(...args);
+    turfName = await settingsService.getSetting('turf_name') || 'KICKOFF ARENA';
+  } catch (err) {
+    console.warn(`[NotificationService] Failed to load turf_name for ${triggerLabel}, using fallback.`);
+  }
+
+  try {
+    content = templateFn(...args, turfName);
   } catch (err) {
     console.error(`[NotificationService] Failed to build admin alert template for "${triggerLabel}":`, err.message);
     return;

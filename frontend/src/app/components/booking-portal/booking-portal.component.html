@@ -99,7 +99,7 @@
   <header class="navbar">
     <div class="logo">
       <span class="ball-icon">⚽</span>
-      <span class="logo-text">KICKOFF <span class="accent">ARENA</span></span>
+      <span class="logo-text">{{ appSettings?.turf_name || 'KICKOFF ARENA' }}</span>
     </div>
     <nav>
       <a routerLink="/season-booking" class="btn btn-secondary">📅 Season Booking</a>

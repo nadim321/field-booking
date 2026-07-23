@@ -99,6 +99,9 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   paymentResultLoading: boolean = false;
   paymentResultBookingId: number | null = null; // kept for "Try Again" retry
 
+  // Public app settings (dynamic turf info)
+  appSettings: any = null;
+
   ngOnInit(): void {
     // Set default date to today in YYYY-MM-DD local format
     this.todayDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
@@ -107,6 +110,10 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     this.selectedDate = `${yyyy}-${mm}-${dd}`;
+
+    this.apiService.getPublicSettings().subscribe(settings => {
+      this.appSettings = settings;
+    });
 
     this.loadSlots();
 

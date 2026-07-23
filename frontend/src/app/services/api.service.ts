@@ -251,16 +251,20 @@ export class ApiService {
 
   // --- Admin: App Settings ---
 
-  getSettings(): Observable<{ advance_payment_percentage: number }> {
-    return this.http.get<{ advance_payment_percentage: number }>(`${this.apiUrl}/admin/settings`, {
+  getSettings(): Observable<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }> {
+    return this.http.get<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }>(`${this.apiUrl}/admin/settings`, {
       headers: this.getAuthHeaders()
     });
   }
 
-  updateSettings(data: { advance_payment_percentage: number }): Observable<any> {
+  updateSettings(data: { advance_payment_percentage?: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }): Observable<any> {
     return this.http.put<any>(`${this.apiUrl}/admin/settings`, data, {
       headers: this.getAuthHeaders()
     });
+  }
+
+  getPublicSettings(): Observable<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }> {
+    return this.http.get<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }>(`${this.apiUrl}/settings/public`);
   }
 
   // --- Admin: Bulk Slot Blocking ---
