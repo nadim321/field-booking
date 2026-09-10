@@ -115,6 +115,8 @@ export class ApiService {
     customer_email?: string;
     team_name?: string;
     session_token: string;
+    policy_accepted: boolean;
+    policy_version: string;
   }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/slots/confirm`, bookingData);
   }
@@ -166,6 +168,18 @@ export class ApiService {
     return this.http.put<any>(`${this.apiUrl}/admin/bookings/${bookingId}`, body, {
       headers: this.getAuthHeaders()
     });
+  }
+
+  getCancellationQuote(id: number, source: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/admin/bookings/${id}/cancellation-quote?source=${source}`, { headers: this.getAuthHeaders() });
+  }
+
+  cancelBooking(id: number, source: string, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/admin/bookings/${id}/cancel`, { source, reason }, { headers: this.getAuthHeaders() });
+  }
+
+  recordRefund(id: number, reference: string, amount: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/admin/bookings/${id}/refund-record`, { reference, amount }, { headers: this.getAuthHeaders() });
   }
 
   deleteBooking(bookingId: number): Observable<any> {

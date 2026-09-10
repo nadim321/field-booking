@@ -40,6 +40,39 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
+  language: 'en' | 'bn' = 'en';
+  bookingStep: 'details' | 'payment' = 'details';
+  submitting = false;
+  policyAccepted = false;
+
+  t(en: string, bn: string): string { return this.language === 'bn' ? bn : en; }
+
+  toggleLanguage(): void {
+    this.language = this.language === 'en' ? 'bn' : 'en';
+    try { localStorage.setItem('booking-language', this.language); } catch { /* Storage may be unavailable. */ }
+  }
+
+  get advanceAmount(): number | null {
+    const percentage = Number(this.appSettings?.advance_payment_percentage);
+    if (!this.selectedSlot || !Number.isFinite(percentage) || percentage <= 0 || percentage > 100) return null;
+    return Math.round(Number(this.selectedSlot.price) * percentage) / 100;
+  }
+
+  get amountNow(): number | null { return this.paymentMethod === 'later' ? 0 : this.advanceAmount; }
+
+  get amountDue(): number | null {
+    return this.amountNow === null ? null : Math.round((Number(this.selectedSlot?.price || 0) - this.amountNow) * 100) / 100;
+  }
+
+  get validDetails(): boolean {
+    return !!this.customerName.trim() && /^(?:\+?88)?01[3-9]\d{8}$/.test(this.customerPhone.trim())
+      && (!this.customerEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.customerEmail.trim()));
+  }
+
+  reviewBooking(): void {
+    if (this.validDetails && this.remainingSeconds > 0) this.bookingStep = 'payment';
+  }
+
   selectedDate: string = '';
   slots: TurfSlot[] = [];
   loading: boolean = false;
@@ -84,7 +117,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   // One shared view with a state-driven outcome, rather than separate
   // pages, since all outcomes need the same booking summary card and only
   // the headline/actions differ.
-  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | 'requested' | null = null;
+  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | 'requested' | 'booking_cancelled' | null = null;
   paymentResultBooking: {
     booking_id: number;
     booking_date: string;
@@ -93,6 +126,8 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     price: number;
     amount_paid: number;
     balance_due: number;
+    refund_amount?: number;
+    refunded_amount?: number;
     status: string;
     payment_status: string;
   } | null = null;
@@ -103,17 +138,13 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   appSettings: any = null;
 
   ngOnInit(): void {
-    // Set default date to today in YYYY-MM-DD local format
-    this.todayDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    this.selectedDate = `${yyyy}-${mm}-${dd}`;
+    try { this.language = localStorage.getItem('booking-language') === 'bn' ? 'bn' : 'en'; } catch { /* Use English. */ }
+    this.todayDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
+    this.selectedDate = this.todayDate;
 
-    this.apiService.getPublicSettings().subscribe(settings => {
-      this.appSettings = settings;
-    });
+    this.apiService.getPublicSettings().subscribe({ next: settings => this.appSettings = settings, error: () => this.appSettings = null });
 
     this.loadSlots();
 
@@ -147,6 +178,8 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
           next: (res) => {
             this.paymentResultLoading = false;
             this.paymentResultBooking = res;
+            if (res.status === 'cancelled') this.paymentResultOutcome = 'booking_cancelled';
+            else if (this.paymentResultOutcome === 'success' && res.status !== 'approved') this.paymentResultOutcome = 'error';
           },
           error: () => {
             this.paymentResultLoading = false;
@@ -189,15 +222,18 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
 
   loadSlots(): void {
     if (!this.selectedDate) return;
+    const requestedDate = this.selectedDate;
     this.loading = true;
     this.errorMsg = '';
     this.apiService.getAvailableSlots(this.selectedDate).subscribe({
       next: (res) => {
+        if (requestedDate !== this.selectedDate) return;
         this.slots = res.slots;
         this.loading = false;
       },
       error: (err) => {
-        this.errorMsg = err.error?.message || 'Failed to load turf slots. Make sure backend is running.';
+        if (requestedDate !== this.selectedDate) return;
+        this.errorMsg = this.t('Could not load slots. Please try again.', 'স্লট লোড হয়নি। আবার চেষ্টা করুন।');
         this.loading = false;
         this.showToast('Error loading slots', 'error');
       }
@@ -229,9 +265,9 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   /** Clean display text for the status badge (avoids showing a raw
    * underscore like "SEASON_RESERVED" to the customer). */
   statusLabel(status: TurfSlot['status']): string {
-    if (status === 'season_reserved') return 'SEASON BOOKING';
-    if (status === 'blocked') return 'BLOCKED';
-    return status.toUpperCase();
+    const labels: Record<string, string> = { available: 'খালি', held: 'সাময়িক সংরক্ষিত', season_reserved: 'সিজন বুকিং', pending: 'অনুমোদনের অপেক্ষায়', approved: 'বুক করা', blocked: 'বন্ধ' };
+    if (this.language === 'bn') return labels[status] || status;
+    return status === 'season_reserved' ? 'SEASON BOOKING' : status.toUpperCase();
   }
 
   /** Converts a 24h "HH:MM" string to a friendly 12h "H:MM AM/PM" string.
@@ -264,24 +300,24 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   onSlotClick(slot: TurfSlot): void {
     if (slot.status !== 'available' || slot.is_active === 0 || this.holdLoading) return;
 
+    const heldDate = this.selectedDate;
     this.holdLoading = true;
     this.apiService.holdSlot(slot.id, this.selectedDate).subscribe({
       next: (res) => {
         this.holdLoading = false;
         this.holdInfo = {
           slot_id: slot.id,
-          booking_date: this.selectedDate,
+          booking_date: heldDate,
           session_token: res.session_token,
           expires_at: res.expires_at
         };
         this.selectedSlot = slot;
         this.showModal = true;
+        this.bookingStep = 'details';
+        this.policyAccepted = false;
 
         // Reset form fields
-        this.customerName = '';
-        this.customerPhone = '';
-        this.customerEmail = '';
-        this.teamName = '';
+        // Preserve details when the customer changes slots or a hold expires.
         this.paymentMethod = 'later';
 
         this.startCountdown(res.expires_at);
@@ -341,7 +377,8 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
 
   private onHoldExpired(): void {
     this.clearCountdown();
-    this.showToast('Your hold expired. Please select the slot again.', 'error');
+    if (this.submitting) return;
+    this.showToast(this.t('Your hold expired. Select a slot again; your details are kept.', 'সময় শেষ। আবার স্লট বেছে নিন; আপনার তথ্য রাখা হয়েছে।'), 'error');
     this.closeBookingModal();
     this.loadSlots();
   }
@@ -353,6 +390,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
    * becomes available again right away for other users.
    */
   closeBookingModal(): void {
+    if (this.submitting) return;
     if (this.holdInfo) {
       this.cancelHoldSilently();
     }
@@ -378,7 +416,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   submitBooking(): void {
-    if (!this.selectedSlot || !this.holdInfo) return;
+    if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || this.amountNow === null) return;
     if (!this.customerName || !this.customerPhone) {
       this.showToast('Name and phone number are required', 'error');
       return;
@@ -386,18 +424,20 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
 
     const bookingData = {
       slot_id: this.selectedSlot.id,
-      booking_date: this.selectedDate,
-      customer_name: this.customerName,
-      customer_phone: this.customerPhone,
-      customer_email: this.customerEmail,
+      booking_date: this.holdInfo.booking_date,
+      customer_name: this.customerName.trim(),
+      customer_phone: this.customerPhone.trim(),
+      customer_email: this.customerEmail.trim(),
       team_name: this.teamName,
+      policy_accepted: this.policyAccepted,
+      policy_version: this.appSettings?.cancellation_policy?.version,
       session_token: this.holdInfo.session_token
     };
 
-    this.loading = true;
+    this.submitting = true;
     this.apiService.confirmBooking(bookingData).subscribe({
       next: (res) => {
-        this.loading = false;
+        this.submitting = false;
         this.clearCountdown();
         const usedPaymentMethod = this.paymentMethod;
 
@@ -431,7 +471,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
-        this.loading = false;
+        this.submitting = false;
         const message = err.error?.message || 'Booking submission failed';
         this.showToast(message, 'error');
 
@@ -459,6 +499,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
    * button (see confirmAndPay()), not here.
    */
   openPaymentConfirm(bookingId: number): void {
+    this._pendingGatewayUrl = null;
     this.paymentConfirmBookingId = bookingId;
     this.paymentConfirmAmount = null;
     this.paymentConfirmError = '';

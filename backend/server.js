@@ -15,6 +15,9 @@ const { isValidCategory, categoryLabel } = require('./constants/slot-categories'
 const sslcommerzProvider = require('./services/payments/sslcommerz.provider');
 const settingsService = require('./services/settings.service');
 
+const { POLICY: cancellationPolicy, VERSION: cancellationPolicyVersion } = require('./services/bookings/cancellation-policy');
+const cancellationService = require('./services/bookings/cancellation.service');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'turf_booking_super_secret_key_123!@#';
@@ -54,6 +57,16 @@ function findActiveRecurringConflict(slotId, dateStr, callback) {
 }
 
 // --- PUBLIC ROUTES ---
+app.get('/api/booking-policy', (req, res) => res.json(cancellationPolicy));
+
+function requirePolicyAcceptance(req, res, next) {
+  if (!db.cancellationReady) return res.status(503).json({ message: 'Booking maintenance in progress. Please retry shortly.' });
+  if (req.body.policy_accepted !== true || req.body.policy_version !== cancellationPolicyVersion) {
+    return res.status(400).json({ message: 'Please read and accept the current cancellation policy before booking.' });
+  }
+  next();
+}
+
 
 // 1. Admin Login
 app.post('/api/auth/login', (req, res) => {
@@ -96,13 +109,15 @@ app.post('/api/auth/login', (req, res) => {
 // guessable sequential integer, so this must never leak customer name,
 // phone, or email to anyone who happens to know/guess an ID.
 app.get('/api/bookings/:id/result', (req, res) => {
+  if (!db.cancellationReady) return res.status(503).json({ message: 'Booking maintenance in progress' });
   const { id } = req.params;
 
   db.get(
     `SELECT b.id, b.booking_date, b.status, b.payment_status, b.amount_paid,
-            s.start_time, s.end_time, s.price
+            s.start_time, s.end_time, s.price, c.refund_amount, c.refunded_amount
      FROM bookings b
      JOIN slots s ON b.slot_id = s.id
+     LEFT JOIN booking_cancellations c ON c.booking_id = b.id
      WHERE b.id = ?`,
     [id],
     (err, booking) => {
@@ -122,7 +137,9 @@ app.get('/api/bookings/:id/result', (req, res) => {
         end_time: booking.end_time,
         price: booking.price,
         amount_paid: booking.amount_paid,
-        balance_due: Math.round(balanceDue * 100) / 100,
+        balance_due: booking.status === 'cancelled' ? 0 : Math.round(balanceDue * 100) / 100,
+        refund_amount: booking.refund_amount,
+        refunded_amount: booking.refunded_amount,
         status: booking.status,
         payment_status: booking.payment_status
       });
@@ -414,7 +431,7 @@ app.delete('/api/slots/hold', (req, res) => {
 });
 
 // 4c. Confirm booking using a valid hold
-app.post('/api/slots/confirm', (req, res) => {
+app.post('/api/slots/confirm', requirePolicyAcceptance, (req, res) => {
   const { slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, session_token } = req.body;
   if (!slot_id || !booking_date || !customer_name || !customer_phone || !session_token) {
     return res.status(400).json({ message: 'Missing required fields' });
@@ -447,9 +464,9 @@ app.post('/api/slots/confirm', (req, res) => {
             }
             // Insert booking
             connection.query(
-              `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status)
-             VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid')`,
-              [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name],
+              `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP())`,
+              [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, cancellationPolicyVersion],
               (insErr, result) => {
                 if (insErr) {
                   return connection.rollback(() => {
@@ -510,7 +527,7 @@ app.post('/api/slots/confirm', (req, res) => {
 });
 
 // NOTE: Existing direct booking endpoint retained for admin/legacy usage. New flow uses hold + confirm.
-app.post('/api/bookings', (req, res) => {
+app.post('/api/bookings', requirePolicyAcceptance, (req, res) => {
   const { slot_id, booking_date, customer_name, customer_phone, customer_email, team_name } = req.body;
 
   if (!slot_id || !booking_date || !customer_name || !customer_phone) {
@@ -549,9 +566,9 @@ app.post('/api/bookings', (req, res) => {
 
           // Create booking with status 'pending'
           db.run(
-            `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status)
-           VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid')`,
-            [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name],
+            `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP())`,
+            [slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, cancellationPolicyVersion],
             function (err) {
               if (err) {
                 if (err.code === 'ER_DUP_ENTRY') {
@@ -682,10 +699,12 @@ app.post('/api/recurring-bookings', (req, res) => {
 
 // 1. Get All Bookings for Admin Dashboard
 app.get('/api/admin/bookings', authenticateAdmin, (req, res) => {
+  if (!db.cancellationReady) return res.status(503).json({ message: 'Booking maintenance in progress' });
   db.all(
-    `SELECT b.*, s.start_time, s.end_time, s.price 
+    `SELECT b.*, s.start_time, s.end_time, s.price, c.refund_amount, c.refunded_amount, c.source AS cancellation_source, c.reason AS cancellation_reason
      FROM bookings b
      JOIN slots s ON b.slot_id = s.id
+     LEFT JOIN booking_cancellations c ON c.booking_id = b.id
      ORDER BY b.booking_date DESC, TIME(s.start_time) ASC`,
     [],
     (err, rows) => {
@@ -697,11 +716,34 @@ app.get('/api/admin/bookings', authenticateAdmin, (req, res) => {
   );
 });
 
+// Cancellation uses an authenticated staff workflow until customer identity verification is configured.
+function cancellationError(res, error) {
+  if (!error.status) console.error('Cancellation operation failed:', error.message);
+  return res.status(error.status || 500).json({ message: error.status ? error.message : 'Could not complete cancellation/refund operation' });
+}
+app.get('/api/admin/bookings/:id/cancellation-quote', authenticateAdmin, async (req, res) => {
+  try { res.json(await cancellationService.cancel(req.params.id, req.query.source || 'customer', '', req.user.id, true)); }
+  catch (error) { cancellationError(res, error); }
+});
+app.post('/api/admin/bookings/:id/cancel', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await cancellationService.cancel(req.params.id, req.body.source, req.body.reason, req.user.id);
+    if (result.booking) notificationService.notifyBookingCancelled({ ...result.booking, refund_amount: result.refund_amount });
+    const { booking, ...response } = result;
+    res.json(response);
+  } catch (error) { cancellationError(res, error); }
+});
+app.post('/api/admin/bookings/:id/refund-record', authenticateAdmin, async (req, res) => {
+  try { res.json(await cancellationService.recordRefund(req.params.id, req.body.reference, req.body.amount, req.user.id)); }
+  catch (error) { cancellationError(res, error); }
+});
+
 // 2. Update Booking Status / Payment Status (Approve/Cancel/Pay)
 app.put('/api/admin/bookings/:id', authenticateAdmin, (req, res) => {
   const { id } = req.params;
   const { status, payment_status } = req.body;
 
+  if (status === 'cancelled') return res.status(400).json({ message: 'Use the cancellation workflow to calculate and record the refund.' });
   // Build dynamic update query
   let updateFields = [];
   let params = [];
@@ -742,8 +784,14 @@ app.put('/api/admin/bookings/:id', authenticateAdmin, (req, res) => {
         return res.status(500).json({ message: 'Failed to look up booking', error: fetchErr.message });
       }
 
+      if (!bookingBeforeUpdate) return res.status(404).json({ message: 'Booking not found' });
+      if (bookingBeforeUpdate.status === 'cancelled') return res.status(409).json({ message: 'Cancelled bookings cannot be reopened or have payments edited.' });
+      if (payment_status === 'paid') {
+        updateFields.push('amount_paid = ?');
+        params.splice(params.length - 1, 0, bookingBeforeUpdate.price);
+      }
       db.run(
-        `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
+        `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ? AND status <> 'cancelled'`,
         params,
         function (err) {
           if (err) {
@@ -773,12 +821,12 @@ app.put('/api/admin/bookings/:id', authenticateAdmin, (req, res) => {
 app.delete('/api/admin/bookings/:id', authenticateAdmin, (req, res) => {
   const { id } = req.params;
 
-  db.run('DELETE FROM bookings WHERE id = ?', [id], function (err) {
+  db.run("DELETE FROM bookings WHERE id = ? AND amount_paid = 0 AND payment_status = 'unpaid' AND NOT EXISTS (SELECT 1 FROM payment_transactions WHERE booking_id = ?) AND NOT EXISTS (SELECT 1 FROM booking_cancellations WHERE booking_id = ?)", [id, id, id], function (err) {
     if (err) {
       return res.status(500).json({ message: 'Failed to delete booking', error: err.message });
     }
     if (this.changes === 0) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(409).json({ message: 'Booking not found or protected by payment/refund history. Cancel instead of deleting.' });
     }
     res.json({ message: 'Booking deleted successfully' });
   });
@@ -1317,7 +1365,7 @@ app.post('/api/payments/initiate', async (req, res) => {
     });
 
     if (sslczResponse.status !== 'SUCCESS' || !sslczResponse.GatewayPageURL) {
-      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ?`, [tranId]);
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ? AND status <> 'valid'`, [tranId]);
       return res.status(502).json({
         message: 'Failed to initiate payment session with the payment gateway',
         gateway_reason: sslczResponse.failedreason || 'Unknown error'
@@ -1359,77 +1407,20 @@ async function confirmPaymentByValId(valId, sourceLabel) {
     return { ok: false, reason: `No local transaction found for tran_id ${validation.tran_id}` };
   }
 
-  // Security checkpoint per SSLCommerz docs: validate amount against our
-  // own records, not just trust whatever the gateway response claims.
-  const expectedAmount = parseFloat(transaction.amount);
-  const actualAmount = parseFloat(validation.amount);
-  if (Math.abs(expectedAmount - actualAmount) > 0.01) {
-    await dbRunAsync(
-      `UPDATE payment_transactions SET status = 'failed', val_id = ? WHERE tran_id = ?`,
-      [valId, validation.tran_id]
-    );
-    return { ok: false, reason: `Amount mismatch: expected ${expectedAmount}, got ${actualAmount}` };
-  }
-
+  const expectedAmount = Number(transaction.amount);
+  const actualAmount = Number(validation.amount);
   const isValid = validation.status === 'VALID' || validation.status === 'VALIDATED';
-
-  // Already processed (e.g. IPN already confirmed this before the
-  // /success redirect fallback also tried) -- nothing further to do, but
-  // not an error either.
-  if (transaction.status === 'valid' && isValid) {
-    return { ok: true, alreadyProcessed: true, bookingId: transaction.booking_id };
+  if (!isValid || !Number.isFinite(actualAmount) || actualAmount <= 0 || Math.abs(expectedAmount - actualAmount) > 0.01 || validation.currency !== transaction.currency) {
+    return { ok: false, reason: 'Payment amount, currency or validation status did not match' };
   }
 
-  await dbRunAsync(
-    `UPDATE payment_transactions
-     SET status = ?, val_id = ?, card_type = ?, bank_tran_id = ?
-     WHERE tran_id = ?`,
-    [isValid ? 'valid' : 'failed', valId, validation.card_type || null, validation.bank_tran_id || null, validation.tran_id]
-  );
-
-  if (!isValid) {
-    return { ok: false, reason: `Transaction status from gateway: ${validation.status}` };
-  }
-
-  // Apply the payment to the booking: bump amount_paid, set payment_status,
-  // and auto-approve if the advance threshold is now met.
-  const booking = await dbGetAsync(
-    `SELECT b.*, s.price, s.start_time, s.end_time
-     FROM bookings b
-     JOIN slots s ON b.slot_id = s.id
-     WHERE b.id = ?`,
-    [transaction.booking_id]
-  );
-  if (!booking) {
-    return { ok: false, reason: `Booking ${transaction.booking_id} not found` };
-  }
-
-  const newAmountPaid = parseFloat(booking.amount_paid || 0) + actualAmount;
+  const booking = await dbGetAsync('SELECT b.id, s.price FROM bookings b JOIN slots s ON s.id = b.slot_id WHERE b.id = ?', [transaction.booking_id]);
+  if (!booking) return { ok: false, reason: 'Booking not found' };
   const requiredAdvance = await computeRequiredAdvance(booking.price);
-  const meetsAdvanceThreshold = newAmountPaid >= requiredAdvance - 0.01; // small float tolerance
-  const newPaymentStatus = newAmountPaid >= parseFloat(booking.price) - 0.01
-    ? 'paid'
-    : 'partially_paid';
-
-  await dbRunAsync(
-    `UPDATE bookings
-     SET amount_paid = ?,
-         payment_status = ?,
-         payment_method = 'sslcommerz',
-         transaction_id = ?,
-         status = ${meetsAdvanceThreshold ? "'approved'" : 'status'}
-     WHERE id = ?`,
-    [newAmountPaid, newPaymentStatus, validation.tran_id, booking.id]
-  );
-
-  if (meetsAdvanceThreshold && booking.status !== 'approved') {
-    notificationService.notifyAdvancePaymentConfirmed({
-      ...booking,
-      amount_paid: newAmountPaid
-    });
-  }
-
-  return { ok: true, bookingId: booking.id, autoApproved: meetsAdvanceThreshold };
+  const result = await cancellationService.creditValidatedPayment(transaction.id, transaction.booking_id, { ...validation, val_id: valId }, requiredAdvance);
+  if (result.notifyBooking) notificationService.notifyAdvancePaymentConfirmed(result.notifyBooking);
+  const { notifyBooking, ...response } = result;
+  return response;
 }
 
 // 2. IPN listener -- the AUTHORITATIVE server-to-server confirmation path.
@@ -1513,7 +1504,7 @@ app.post('/api/payments/fail', express.urlencoded({ extended: true }), async (re
 
   if (tranId) {
     try {
-      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ?`, [tranId]);
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'failed' WHERE tran_id = ? AND status <> 'valid'`, [tranId]);
       const transaction = await dbGetAsync(`SELECT * FROM payment_transactions WHERE tran_id = ?`, [tranId]);
       if (transaction) {
         bookingIdForRedirect = transaction.booking_id;
@@ -1539,7 +1530,7 @@ app.post('/api/payments/cancel', express.urlencoded({ extended: true }), async (
 
   if (tranId) {
     try {
-      await dbRunAsync(`UPDATE payment_transactions SET status = 'cancelled' WHERE tran_id = ?`, [tranId]);
+      await dbRunAsync(`UPDATE payment_transactions SET status = 'cancelled' WHERE tran_id = ? AND status <> 'valid'`, [tranId]);
       const transaction = await dbGetAsync(`SELECT * FROM payment_transactions WHERE tran_id = ?`, [tranId]);
       if (transaction) {
         bookingIdForRedirect = transaction.booking_id;
@@ -1638,6 +1629,7 @@ app.get('/api/settings/public', async (req, res) => {
   try {
 
     res.json({
+      cancellation_policy: cancellationPolicy,
 
       turf_name: await settingsService.getSetting('turf_name'),
       turf_address: await settingsService.getSetting('turf_address'),

@@ -52,6 +52,7 @@ function bookingApproved(booking, turfName) {
 
 function bookingCancelled(booking, turfName) {
   const slotLine = formatSlotLine(booking);
+  const refundLine = booking.refund_amount == null ? '' : `Refund entitlement: BDT ${Number(booking.refund_amount).toFixed(2)}. ${Number(booking.refund_amount) > 0 ? 'Pending staff processing to your original payment method; target 7–10 business days.' : 'No refund is due under the cancellation policy.'}\n`;
   return {
     smsMessage: `Hi ${booking.customer_name}, your turf booking for ${slotLine} has been CANCELLED. Contact us if this is unexpected. - ${turfName}`,
     emailSubject: `Booking Cancelled - ${turfName}`,
@@ -59,6 +60,7 @@ function bookingCancelled(booking, turfName) {
       `Hi ${booking.customer_name},\n\n` +
       `Your turf booking for ${slotLine} has been cancelled.\n` +
       `Booking ID: ${booking.id || booking.booking_id}\n\n` +
+      refundLine +
       `If you didn't request this or believe it's a mistake, please contact us.\n\n` +
       `- ${turfName}`
   };

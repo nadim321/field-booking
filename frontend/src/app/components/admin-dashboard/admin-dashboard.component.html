@@ -204,6 +204,11 @@
                     <span class="payment-badge" [ngClass]="'pay-' + booking.payment_status">
                       {{ booking.payment_status }}
                     </span>
+                    <div *ngIf="booking.refund_amount != null">
+                      Refund due: ৳{{ booking.refund_amount | number:'1.2-2' }}<br />
+                      Returned: ৳{{ booking.refunded_amount | number:'1.2-2' }}
+                      <button *ngIf="(booking.refund_amount || 0) > (booking.refunded_amount || 0)" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
+                    </div>
                   </td>
                   <td>
                     <div class="action-buttons">
@@ -213,7 +218,7 @@
 
                       <!-- Cancel Option -->
                       <button *ngIf="booking.status === 'pending' || booking.status === 'approved'"
-                        (click)="updateBookingStatus(booking.id, 'cancelled')" title="Cancel Booking"
+                        (click)="openCancellation(booking)" title="Cancel Booking"
                         class="btn-action btn-act-cancel">❌</button>
 
                       <!-- Mark Paid -->
@@ -596,4 +601,28 @@
 <div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
   <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
   <span class="toast-text">{{ toastMsg }}</span>
+</div>
+<div *ngIf="cancellationBooking" class="cancellation-overlay">
+  <form class="cancellation-dialog" role="dialog" aria-modal="true" aria-labelledby="cancellation-title" (ngSubmit)="confirmCancellation()">
+    <h2 id="cancellation-title">Cancel booking #{{ cancellationBooking.id }}</h2>
+    <label>Who is cancelling?
+      <select name="source" [(ngModel)]="cancellationSource" (ngModelChange)="refreshCancellationQuote()" [disabled]="cancellationBusy">
+        <option value="customer">Customer request</option><option value="venue">Turf closure / venue issue — full refund</option>
+      </select>
+    </label>
+    <label>Reason <textarea name="reason" [(ngModel)]="cancellationReason" required maxlength="500" [disabled]="cancellationBusy"></textarea></label>
+    <p *ngIf="cancellationBusy" role="status">Please wait…</p>
+    <p *ngIf="cancellationError" role="alert">{{ cancellationError }}</p>
+    <div *ngIf="cancellationQuote && !cancellationQuote.already_cancelled">
+      <p>Received: ৳{{ cancellationQuote.amount_paid | number:'1.2-2' }}</p>
+      <p>Refund entitlement: <strong>{{ cancellationQuote.refund_percent }}% — ৳{{ cancellationQuote.refund_amount | number:'1.2-2' }}</strong></p>
+      <p *ngIf="cancellationQuote.policy_version === 'legacy-goodwill'">This booking predates recorded policy acceptance. A full goodwill refund applies.</p>
+      <p>The amount is recalculated when you confirm. Cancellation releases the slot; money must be refunded separately to the original payment method.</p>
+    </div>
+    <p *ngIf="cancellationQuote?.already_cancelled">This booking was already cancelled. Refresh the booking list.</p>
+    <div class="cancellation-actions">
+      <button type="button" class="btn btn-secondary" [disabled]="cancellationBusy" (click)="cancellationBooking = null">Keep booking</button>
+      <button type="submit" class="btn btn-primary" [disabled]="cancellationBusy || !cancellationQuote || cancellationQuote.already_cancelled || !cancellationReason.trim()">Confirm cancellation</button>
+    </div>
+  </form>
 </div>

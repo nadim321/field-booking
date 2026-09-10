@@ -12,6 +12,8 @@
       <span *ngIf="paymentResultOutcome === 'error'">❓</span>
     </div>
 
+    <h2 *ngIf="paymentResultOutcome === 'booking_cancelled'">{{ t('Booking cancelled', 'বুকিং বাতিল হয়েছে') }}</h2>
+    <p *ngIf="paymentResultOutcome === 'booking_cancelled'">{{ t('This booking remains cancelled. Any payment received after cancellation is refundable. Contact the turf for processing.', 'এই বুকিং বাতিল রয়েছে। বাতিলের পরে পাওয়া পেমেন্ট ফেরতযোগ্য। রিফান্ডের জন্য মাঠে যোগাযোগ করুন।') }}</p>
     <h2 *ngIf="paymentResultOutcome === 'success'">Booking Confirmed!</h2>
     <h2 *ngIf="paymentResultOutcome === 'requested'">Booking Requested!</h2>
     <h2 *ngIf="paymentResultOutcome === 'failed'">Payment Failed</h2>
@@ -64,6 +66,12 @@
         <span class="label">Amount Paid:</span>
         <span class="val highlight">৳ {{ paymentResultBooking.amount_paid }}</span>
       </div>
+      <div class="summary-item" *ngIf="paymentResultBooking.refund_amount != null">
+        <span>{{ t('Refund entitlement', 'ফেরতযোগ্য টাকা') }}</span><span>৳ {{ paymentResultBooking.refund_amount | number:'1.2-2' }}</span>
+      </div>
+      <div class="summary-item" *ngIf="paymentResultBooking.refunded_amount != null">
+        <span>{{ t('Refund recorded', 'ফেরত দেওয়া হয়েছে') }}</span><span>৳ {{ paymentResultBooking.refunded_amount | number:'1.2-2' }}</span>
+      </div>
       <div class="summary-item" *ngIf="paymentResultBooking.balance_due > 0">
         <span class="label">Balance Due (at turf):</span>
         <span class="val">৳ {{ paymentResultBooking.balance_due }}</span>
@@ -102,6 +110,7 @@
       <span class="logo-text">{{ appSettings?.turf_name || 'KICKOFF ARENA' }}</span>
     </div>
     <nav>
+      <button type="button" class="btn btn-secondary" (click)="toggleLanguage()" aria-label="Change booking language">{{ language === 'en' ? 'বাংলা' : 'English' }}</button>
       <a routerLink="/season-booking" class="btn btn-secondary">📅 Season Booking</a>
       <a routerLink="/admin/login" class="btn btn-secondary admin-btn">Admin Panel</a>
     </nav>
@@ -112,19 +121,23 @@
   <section class="hero">
     <div class="hero-content">
       <span class="badge">🔥 Premium 7-a-side Artificial Turf</span>
-      <h1>Select a Slot & Start Playing</h1>
+      <h1>{{ t('Select a Slot & Start Playing', 'স্লট বেছে নিন, খেলা শুরু করুন') }}</h1>
       <p>Enjoy under-lights football with top-tier grass, spacious changing rooms, and free parking.</p>
     </div>
   </section>
 
   <!-- Main Booking Area -->
   <main class="booking-section">
+    <ol class="booking-steps" aria-label="Booking steps">
+      <li class="active">1. {{ t('Date', 'তারিখ') }}</li><li class="active">2. {{ t('Slot', 'স্লট') }}</li>
+      <li>3. {{ t('Details', 'তথ্য') }}</li><li>4. {{ t('Payment', 'পেমেন্ট') }}</li>
+    </ol>
     <!-- Date picker and controls -->
     <div class="controls-card">
       <div class="control-group">
-        <label for="booking-date">Choose Playing Date</label>
+        <label for="booking-date">{{ t('Choose Playing Date', 'খেলার তারিখ বেছে নিন') }}</label>
         <div class="input-wrapper">
-          <input type="date" id="booking-date" [(ngModel)]="selectedDate" (change)="onDateChange()"
+          <input type="date" id="booking-date" [(ngModel)]="selectedDate" (change)="onDateChange()" [disabled]="holdLoading"
             class="form-control date-input" [min]="todayDate" />
         </div>
       </div>
@@ -285,10 +298,10 @@
 
 <!-- Booking Modal Dialog -->
 <div class="modal-backdrop" *ngIf="showModal">
-  <div class="modal-card">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="booking-title">
     <div class="modal-header">
-      <h2>Confirm Turf Booking</h2>
-      <button class="close-btn" (click)="closeBookingModal()">&times;</button>
+      <h2 id="booking-title">{{ bookingStep === 'details' ? t('3. Your details', '৩. আপনার তথ্য') : t('4. Review & payment', '৪. যাচাই ও পেমেন্ট') }}</h2>
+      <button class="close-btn" aria-label="Close booking" [disabled]="submitting" (click)="closeBookingModal()">&times;</button>
     </div>
 
     <div class="modal-body">
@@ -311,68 +324,113 @@
       <div class="hold-timer" *ngIf="holdInfo" [class.hold-timer-warning]="remainingSeconds <= 60">
         <span class="hold-timer-icon">⏳</span>
         <span class="hold-timer-text">
-          Slot held for you — complete booking within <strong>{{ remainingMinutesLabel }}</strong>
+          {{ t('Complete your booking within', 'বুকিং সম্পন্ন করার বাকি সময়') }} <strong>{{ remainingMinutesLabel }}</strong>
         </span>
       </div>
 
-      <form (ngSubmit)="submitBooking()" #bookingForm="ngForm">
+      <form (ngSubmit)="bookingStep === 'details' ? reviewBooking() : submitBooking()" #bookingForm="ngForm">
+        <div [hidden]="bookingStep !== 'details'">
         <div class="form-group">
-          <label for="custName">Customer Name <span class="req">*</span></label>
+          <label for="custName">{{ t('Customer Name', 'আপনার নাম') }} <span class="req">*</span></label>
           <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required
-            placeholder="Enter your name" #nameInput="ngModel" />
+            autocomplete="name" maxlength="255" [placeholder]="t('Enter your name', 'আপনার নাম')" #nameInput="ngModel" />
           <span class="form-err" *ngIf="nameInput.touched && !customerName">Name is required</span>
         </div>
 
         <div class="form-group">
-          <label for="custPhone">Phone Number <span class="req">*</span></label>
+          <label for="custPhone">{{ t('Phone Number', 'মোবাইল নম্বর') }} <span class="req">*</span></label>
           <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" class="form-control" required
-            placeholder="017XXXXXXXX" #phoneInput="ngModel" />
-          <span class="form-err" *ngIf="phoneInput.touched && !customerPhone">Phone number is required</span>
+            autocomplete="tel" inputmode="tel" pattern="(\+?88)?01[3-9][0-9]{8}" placeholder="017XXXXXXXX" #phoneInput="ngModel" />
+          <span class="form-err" *ngIf="phoneInput.touched && phoneInput.invalid">{{ t('Enter a valid Bangladesh mobile number', 'সঠিক বাংলাদেশি মোবাইল নম্বর দিন') }}</span>
         </div>
 
         <div class="form-group">
-          <label for="teamName">Team Name <span class="opt">(Optional)</span></label>
+          <label for="teamName">{{ t('Team Name', 'দলের নাম') }} <span class="opt">{{ t('(Optional)', '(ঐচ্ছিক)') }}</span></label>
           <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control"
             placeholder="e.g. Dream Team FC" />
         </div>
 
         <div class="form-group">
-          <label for="custEmail">Email Address <span class="opt">(Optional)</span></label>
+          <label for="custEmail">{{ t('Email Address', 'ইমেইল') }} <span class="opt">{{ t('(Optional)', '(ঐচ্ছিক)') }}</span></label>
           <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control"
-            placeholder="yourname@gmail.com" />
+            autocomplete="email" email placeholder="yourname@gmail.com" />
         </div>
 
+        </div>
+        <div [hidden]="bookingStep !== 'payment'">
+        <p class="review-customer">{{ customerName }} · {{ customerPhone }}</p>
         <div class="form-group">
-          <label>Payment Method</label>
+          <label>{{ t('Payment method', 'পেমেন্ট পদ্ধতি') }}</label>
           <div class="payment-options">
             <label class="pay-option">
               <input type="radio" name="payMethod" value="later" [(ngModel)]="paymentMethod" checked />
               <div class="pay-card">
                 <span class="pay-icon">⏱️</span>
-                <span class="pay-text">Book Now, Pay Later</span>
+                <span class="pay-text">{{ t('Book Now, Pay Later', 'বুকিং করুন, পরে পেমেন্ট') }}</span>
               </div>
             </label>
             <label class="pay-option">
               <input type="radio" name="payMethod" value="bkash" [(ngModel)]="paymentMethod" />
               <div class="pay-card">
                 <span class="pay-icon">📱</span>
-                <span class="pay-text">Bkash / Mobile Pay</span>
+                <span class="pay-text">{{ t('Bkash / Mobile Pay', 'বিকাশ / মোবাইল পেমেন্ট') }}</span>
               </div>
             </label>
             <label class="pay-option">
               <input type="radio" name="payMethod" value="card" [(ngModel)]="paymentMethod" />
               <div class="pay-card">
                 <span class="pay-icon">💳</span>
-                <span class="pay-text">Credit / Debit Card</span>
+                <span class="pay-text">{{ t('Credit / Debit Card', 'ক্রেডিট / ডেবিট কার্ড') }}</span>
               </div>
             </label>
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeBookingModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" [disabled]="!bookingForm.valid || loading">
-            {{ paymentMethod === 'later' ? 'Request Booking' : 'Proceed to Payment' }}
+        <div class="slot-summary" aria-live="polite">
+          <div class="summary-item"><span>{{ t('Total price', 'মোট মূল্য') }}</span><strong>৳ {{ selectedSlot?.price | number:'1.2-2' }}</strong></div>
+          <div class="summary-item"><span>{{ t('Pay now', 'এখন পরিশোধ') }}</span><strong>{{ amountNow === null ? t('Unavailable', 'পাওয়া যাচ্ছে না') : '৳ ' + (amountNow | number:'1.2-2') }}</strong></div>
+          <div class="summary-item"><span>{{ t('Due at turf', 'মাঠে বাকি পরিশোধ') }}</span><strong>{{ amountDue === null ? '—' : '৳ ' + (amountDue | number:'1.2-2') }}</strong></div>
+        </div>
+        <p *ngIf="paymentMethod === 'later'">{{ t('Pay-later requests need admin approval.', 'পরে পেমেন্টের বুকিং অ্যাডমিনের অনুমোদন সাপেক্ষে।') }}</p>
+        <p *ngIf="paymentMethod !== 'later'">{{ t('The exact advance is confirmed before you open the payment gateway.', 'পেমেন্ট গেটওয়েতে যাওয়ার আগে অগ্রিমের সঠিক পরিমাণ দেখানো হবে।') }}</p>
+        <aside class="booking-policy" aria-labelledby="policy-heading">
+          <div class="policy-heading">
+            <span class="policy-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 4 6v6c0 4 5 7 8 9 3-2 8-5 8-9V6l-8-3Z"/><path d="m8 12 3 3 5-6"/></svg>
+            </span>
+            <div><h3 id="policy-heading">{{ t('Cancellation & rescheduling', 'বাতিল ও সময় পরিবর্তন') }}</h3>
+              <p>{{ t('Know your options before you book.', 'বুকিংয়ের আগে জেনে নিন আপনার সুযোগগুলো।') }}</p></div>
+          </div>
+          <ng-container *ngIf="appSettings?.cancellation_policy as policy; else policyUnavailable">
+            <div class="refund-tiers" aria-label="Refund windows">
+              <div class="refund-tier" *ngFor="let tier of policy.tiers; let i = index" [class.refund-tier-full]="tier.refund_percent === 100">
+                <span class="refund-window">{{ tier.minimum_hours > 0 ? (i === 0 ? tier.minimum_hours + '+ ' + t('hrs before', 'ঘণ্টা আগে') : tier.minimum_hours + '–' + policy.tiers[i - 1].minimum_hours + ' ' + t('hrs before', 'ঘণ্টা আগে')) : t('Under 24 hrs', '২৪ ঘণ্টার কম') }}</span>
+                <strong>{{ tier.refund_percent }}<span>%</span></strong>
+                <span class="refund-caption">{{ t('refund', 'রিফান্ড') }}</span>
+              </div>
+            </div>
+            <p class="policy-basis">{{ t('Based on the amount paid · Bangladesh time', 'পরিশোধিত টাকার উপর · বাংলাদেশ সময়') }}</p>
+            <div class="policy-assurance">
+              <span class="assurance-dot" aria-hidden="true"></span>
+              <p>{{ t('If the turf cancels, you get a full refund.', 'মাঠ কর্তৃপক্ষ বাতিল করলে সম্পূর্ণ টাকা ফেরতযোগ্য।') }}</p>
+            </div>
+            <details class="policy-details">
+              <summary>{{ t('Full policy & rescheduling', 'সম্পূর্ণ শর্ত ও সময় পরিবর্তন') }}<span class="policy-chevron" aria-hidden="true"></span></summary>
+              <ul><li *ngFor="let rule of policy[language]">{{ rule }}</li></ul>
+              <a *ngIf="appSettings?.turf_phone" class="policy-contact" [href]="'tel:' + appSettings.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }} <span>{{ appSettings.turf_phone }}</span></a>
+            </details>
+          </ng-container>
+          <ng-template #policyUnavailable><p class="policy-unavailable" role="status">{{ t('Policy could not be loaded. Refresh before booking.', 'শর্ত লোড হয়নি। বুকিংয়ের আগে পেজ রিফ্রেশ করুন।') }}</p></ng-template>
+          <label class="policy-consent" [class.policy-consent-accepted]="policyAccepted">
+            <input type="checkbox" name="policyAccepted" [(ngModel)]="policyAccepted" [disabled]="!appSettings?.cancellation_policy" />
+            <span>{{ t('I have read and accept the cancellation and refund policy.', 'আমি বাতিল ও রিফান্ডের শর্ত পড়েছি এবং সম্মত।') }}</span>
+          </label>
+        </aside>
+        </div>
+        <div class="modal-footer booking-actions">
+          <button type="button" class="btn btn-secondary" [disabled]="submitting" (click)="bookingStep === 'payment' ? bookingStep = 'details' : closeBookingModal()">{{ bookingStep === 'payment' ? t('Back', 'পেছনে') : t('Cancel', 'ফিরে যান') }}</button>
+          <button type="submit" class="btn btn-primary" [disabled]="!validDetails || submitting || remainingSeconds <= 0 || (bookingStep === 'payment' && (!policyAccepted || !appSettings?.cancellation_policy || amountNow === null))">
+            {{ submitting ? t('Submitting…', 'পাঠানো হচ্ছে…') : bookingStep === 'details' ? t('Review booking', 'বুকিং যাচাই করুন') : paymentMethod === 'later' ? t('Request booking', 'বুকিং অনুরোধ করুন') : t('Continue to payment', 'পেমেন্টে এগিয়ে যান') }}
           </button>
         </div>
       </form>
@@ -385,14 +443,14 @@
 <div class="modal-backdrop" *ngIf="showPaymentConfirm">
   <div class="modal-card">
     <div class="modal-header">
-      <h2>Confirm Advance Payment</h2>
+      <h2>{{ t('Confirm Advance Payment', 'অগ্রিম পেমেন্ট নিশ্চিত করুন') }}</h2>
       <button class="close-btn" (click)="closePaymentConfirm()">&times;</button>
     </div>
 
     <div class="modal-body">
       <div *ngIf="paymentConfirmLoading" class="spinner-container">
         <div class="spinner"></div>
-        <p>Preparing payment...</p>
+        <p>{{ t('Preparing payment...', 'পেমেন্ট প্রস্তুত হচ্ছে…') }}</p>
       </div>
 
       <div *ngIf="!paymentConfirmLoading && paymentConfirmError" class="alert error-alert">
@@ -407,7 +465,7 @@
             <span class="val">#{{ paymentConfirmBookingId }}</span>
           </div>
           <div class="summary-item">
-            <span class="label">Advance to pay now:</span>
+            <span class="label">{{ t('Advance to pay now:', 'এখন অগ্রিম পরিশোধ:') }}</span>
             <span class="val highlight">৳ {{ paymentConfirmAmount }}</span>
           </div>
         </div>
@@ -418,7 +476,7 @@
       </div>
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" (click)="closePaymentConfirm()">Pay at Turf Instead</button>
+        <button type="button" class="btn btn-secondary" (click)="closePaymentConfirm()">{{ t('Pay at Turf Instead', 'মাঠে পেমেন্ট করুন') }}</button>
         <button type="button" class="btn btn-primary" [disabled]="paymentConfirmLoading || !!paymentConfirmError"
           (click)="confirmAndPay()">
           Pay Now
@@ -429,7 +487,7 @@
 </div>
 
 <!-- Toast Notifications -->
-<div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
+<div role="status" aria-live="polite" class="toast" *ngIf="toastMsg" [ngClass]="toastType">
   <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
   <span class="toast-text">{{ toastMsg }}</span>
 </div>

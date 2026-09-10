@@ -384,6 +384,8 @@
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
   background-color: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(8px);
   display: flex;
@@ -394,6 +396,10 @@
 }
 
 .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
   background-color: #1e293b;
   border-radius: 16px;
   max-width: 520px;
@@ -496,6 +502,7 @@
 }
 
 .modal-header {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -525,6 +532,18 @@
 
 .modal-body {
   padding: 1.5rem;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.booking-actions {
+  position: sticky;
+  bottom: -1.5rem;
+  z-index: 1;
+  background: #1e293b;
+  padding-bottom: 1.5rem;
 }
 
 .slot-summary {
@@ -798,4 +817,61 @@
 
 .footer p {
   margin: 0;
+}
+/* Booking progress and mobile checkout. */
+.booking-steps { display:flex; gap:12px; list-style:none; padding:0; margin:0 0 24px; color:#94a3b8; }
+.booking-steps li { flex:1; padding:12px 8px; border-bottom:3px solid #334155; }
+.booking-steps .active { color:#34d399; border-color:#34d399; }
+.booking-policy { margin:24px 0 8px; background:#111b2d; border:1px solid #334155; border-radius:16px; overflow:hidden; }
+.policy-heading { display:flex; gap:12px; align-items:center; padding:18px 18px 16px; }
+.policy-icon { display:grid; place-items:center; flex:0 0 38px; height:38px; border:1px solid #28514e; border-radius:12px; color:#6ee7b7; background:#17332f; }
+.policy-icon svg { width:22px; height:22px; }
+.policy-heading h3 { margin:0; color:#f1f5f9; font-size:14px; font-weight:650; line-height:1.5; }
+.policy-heading p { margin:3px 0 0; color:#94a3b8; font-size:12px; line-height:1.5; }
+.refund-tiers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding:0 18px; }
+.refund-tier { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 4px; border:1px solid #334155; border-radius:10px; background:#172236; text-align:center; }
+.refund-tier-full { border-color:#285b50; background:#132f2c; }
+.refund-window { color:#cbd5e1; font-size:11px; line-height:1.5; }
+.refund-tier strong { font-size:27px; font-weight:700; line-height:1.2; color:#e2e8f0; font-variant-numeric:tabular-nums; }
+.refund-tier-full strong { color:#6ee7b7; }
+.refund-tier strong span { font-size:16px; margin-left:2px; }
+.refund-caption { font-size:11px; color:#94a3b8; }
+.policy-basis { margin:10px 18px 0; font-size:11px; text-align:center; color:#94a3b8; line-height:1.5; }
+.policy-assurance { display:flex; gap:8px; align-items:baseline; margin:14px 18px; }
+.assurance-dot { width:6px; height:6px; border-radius:50%; background:#6ee7b7; flex-shrink:0; }
+.policy-assurance p { margin:0; color:#cbd5e1; font-size:12px; line-height:1.6; }
+.policy-details { margin:0 18px; border-top:1px solid #334155; }
+.policy-details summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; padding:10px 0; cursor:pointer; list-style:none; color:#cbd5e1; font-size:12px; font-weight:600; }
+.policy-details summary::-webkit-details-marker { display:none; }
+.policy-details summary:focus-visible { outline:2px solid #6ee7b7; outline-offset:2px; border-radius:4px; }
+.policy-chevron { width:7px; height:7px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg); margin-right:3px; flex-shrink:0; }
+.policy-details[open] .policy-chevron { transform:rotate(225deg); }
+.policy-details ul { margin:0 0 16px; padding-left:18px; color:#cbd5e1; font-size:12px; line-height:1.7; }
+.policy-details li + li { margin-top:8px; }
+.policy-contact { display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; color:#6ee7b7; font-size:12px; padding:0 0 16px; text-underline-offset:3px; }
+.policy-consent { display:flex; align-items:flex-start; gap:10px; padding:15px 18px; background:#182438; border-top:1px solid #334155; cursor:pointer; color:#cbd5e1; font-size:12px; line-height:1.6; }
+.policy-consent-accepted { background:#16302e; color:#d1fae5; }
+.policy-consent input { accent-color:#34d399; width:18px; height:18px; margin:1px 0 0; flex-shrink:0; cursor:pointer; }
+.policy-unavailable { padding:0 18px 16px; color:#fbbf24; font-size:12px; }
+@media (max-width:380px) {
+  .policy-heading { padding:14px 12px; gap:8px; }
+  .refund-tiers { padding:0 12px; gap:5px; }
+  .refund-window { font-size:10px; }
+  .policy-consent { padding:14px 12px; }
+}
+.review-customer { overflow-wrap:anywhere; }
+[hidden] { display:none !important; }
+button:focus-visible, input:focus-visible { outline:3px solid #34d399; outline-offset:3px; }
+@media (max-width:600px) {
+  .navbar { flex-wrap:wrap; gap:12px; }
+  .navbar nav { display:flex; flex-wrap:wrap; gap:8px; }
+  .booking-steps { gap:4px; font-size:12px; }
+  .modal-backdrop { padding:8px; align-items:flex-end; }
+  .modal-card { width:100%; max-height:100%; border-radius:18px 18px 0 0; }
+  .modal-header { padding:16px; }
+  .modal-body { padding:16px; }
+  .booking-actions { position:sticky; bottom:-16px; background:#1e293b; padding:16px 0 max(16px, env(safe-area-inset-bottom)); display:flex; gap:8px; }
+  .booking-actions .btn { min-height:48px; flex:1; }
+  .payment-options { flex-direction:column; }
+  .toast { left:12px; right:12px; bottom:16px; }
 }

@@ -14,6 +14,10 @@ interface BookingRecord {
   team_name?: string;
   status: 'pending' | 'approved' | 'cancelled';
   payment_status: 'paid' | 'unpaid';
+  refund_amount?: number;
+  refunded_amount?: number;
+  cancellation_source?: string;
+  cancellation_reason?: string;
   created_at: string;
   start_time: string;
   end_time: string;
@@ -237,6 +241,55 @@ export class AdminDashboardComponent implements OnInit {
         this.settingsLoading = false;
         this.showToast(err.error?.message || 'Failed to update settings', 'error');
       }
+    });
+  }
+
+  cancellationBooking: BookingRecord | null = null;
+  cancellationSource = 'customer';
+  cancellationReason = '';
+  cancellationQuote: any = null;
+  cancellationBusy = false;
+  cancellationError = '';
+
+  openCancellation(booking: BookingRecord): void {
+    this.cancellationBooking = booking;
+    this.cancellationSource = 'customer';
+    this.cancellationReason = '';
+    this.refreshCancellationQuote();
+  }
+
+  refreshCancellationQuote(): void {
+    if (!this.cancellationBooking) return;
+    this.cancellationQuote = null;
+    this.cancellationError = '';
+    this.cancellationBusy = true;
+    this.apiService.getCancellationQuote(this.cancellationBooking.id, this.cancellationSource).subscribe({
+      next: quote => { this.cancellationQuote = quote; this.cancellationBusy = false; },
+      error: err => { this.cancellationError = err.error?.message || 'Could not calculate refund'; this.cancellationBusy = false; }
+    });
+  }
+
+  confirmCancellation(): void {
+    if (!this.cancellationBooking || !this.cancellationQuote || this.cancellationBusy || !this.cancellationReason.trim()) return;
+    this.cancellationBusy = true;
+    this.apiService.cancelBooking(this.cancellationBooking.id, this.cancellationSource, this.cancellationReason).subscribe({
+      next: result => {
+        this.cancellationBusy = false;
+        this.cancellationBooking = null;
+        this.showToast(result.already_cancelled ? 'Booking was already cancelled.' : `Booking cancelled. Refund due: ৳${result.refund_amount}. Process the refund separately.`, 'success');
+        this.loadBookings(); this.loadStats();
+      },
+      error: err => { this.cancellationBusy = false; this.cancellationError = err.error?.message || 'Cancellation failed'; }
+    });
+  }
+
+  recordRefund(booking: BookingRecord): void {
+    const due = Number(booking.refund_amount || 0) - Number(booking.refunded_amount || 0);
+    const reference = prompt(`Only after returning ৳${due.toFixed(2)} to the original payment method, enter the refund transaction reference. This action records the refund; it does not transfer money.`);
+    if (!reference?.trim()) return;
+    this.apiService.recordRefund(booking.id, reference.trim(), Math.round(due * 100) / 100).subscribe({
+      next: () => { this.showToast('Refund recorded.', 'success'); this.loadBookings(); },
+      error: err => this.showToast(err.error?.message || 'Could not record refund', 'error')
     });
   }
 

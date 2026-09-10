@@ -1074,3 +1074,8 @@
   border-left: 1px solid rgba(239, 68, 68, 0.3);
   padding-left: 0.35rem;
 }
+.cancellation-overlay { position:fixed; inset:0; z-index:400; background:#000a; display:flex; align-items:center; justify-content:center; padding:16px; }
+.cancellation-dialog { background:#1e293b; color:#f1f5f9; border-radius:16px; padding:24px; width:min(100%, 540px); max-height:90dvh; overflow:auto; }
+.cancellation-dialog label { display:block; margin:16px 0; }
+.cancellation-dialog select, .cancellation-dialog textarea { display:block; width:100%; padding:12px; margin-top:8px; background:#0f172a; color:#f1f5f9; border:1px solid #64748b; border-radius:8px; }
+.cancellation-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:20px; }

@@ -272,7 +272,10 @@ function initializePool() {
                     console.error("Error creating slot_blocks table:", err.message);
                     return;
                   }
-                  seedData();
+                  require('./migrations/cancellation')(pool).then(() => {
+                    dbWrapper.cancellationReady = true;
+                    seedData();
+                  }).catch(error => console.error('Cancellation migration failed:', error.message));
                 });
               });
             });
