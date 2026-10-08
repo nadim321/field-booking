@@ -1,0 +1,51 @@
+name: Build release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+  release:
+    needs: checks
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-test-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pci-test-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: ci-test-password
+      SENTRY_RELEASE: booking-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
+      - run: |
+          test -n "$SENTRY_AUTH_TOKEN" && test -n "$SENTRY_ORG" && test -n "$SENTRY_PROJECT"
+          npm run release --prefix backend
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      - run: npm run test:release --prefix backend -- "../artifacts/$SENTRY_RELEASE.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: booking-release-${{ github.sha }}
+          path: artifacts/*.zip
+          if-no-files-found: error

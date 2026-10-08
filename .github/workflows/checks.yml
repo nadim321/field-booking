@@ -1,0 +1,63 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-test-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pci-test-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASS: ci-test-password
+      DB_PORT: 3306
+      JWT_SECRET: ci-only-secret-not-for-production-use
+      SENTRY_RELEASE: booking-ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
+      - run: sudo apt-get update && sudo apt-get install -y mysql-client
+      - run: npx --no-install playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run check --prefix backend
+      - run: npm test --prefix backend
+      - run: npm run test:integration --prefix backend
+        env:
+          RUN_DB_TESTS: '1'
+          RUN_BACKUP_TESTS: '1'
+      - run: npm test --prefix frontend -- --watch=false --browsers=ChromeHeadless
+      - run: npm run release --prefix backend
+      - run: npm run test:e2e --prefix frontend
+      - run: npm run test:release --prefix backend -- "../artifacts/$SENTRY_RELEASE.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-production
+          path: |
+            frontend/dist/frontend/browser
+            !frontend/dist/frontend/browser/**/*.map
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-failures
+          path: frontend/test-results
+          retention-days: 7
