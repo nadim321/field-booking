@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const { jwtSecret } = require('../config/env');
 
 module.exports = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -15,11 +15,12 @@ module.exports = (req, res, next) => {
 
   const token = parts[1];
 
-  jwt.verify(token, process.env.JWT_SECRET || 'turf_booking_super_secret_key_123!@#', (err, decoded) => {
+  jwt.verify(token, jwtSecret, (err, decoded) => {
     if (err) {
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
 
+    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
     req.user = decoded;
     next();
   });

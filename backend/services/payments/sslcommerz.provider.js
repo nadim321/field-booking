@@ -23,6 +23,15 @@ const STORE_ID = process.env.SSLCOMMERZ_STORE_ID || '';
 const STORE_PASSWORD = process.env.SSLCOMMERZ_STORE_PASSWORD || '';
 const IS_LIVE = process.env.SSLCOMMERZ_IS_LIVE === 'true'; // defaults to false (sandbox)
 
+async function bounded(operation) {
+  let timer;
+  try {
+    return await Promise.race([operation, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Payment provider timed out; reconciliation required')), 20000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
 function getClient() {
   if (!STORE_ID || !STORE_PASSWORD) {
     throw new Error('SSLCommerz credentials not configured (SSLCOMMERZ_STORE_ID / SSLCOMMERZ_STORE_PASSWORD missing in .env)');
@@ -75,7 +84,7 @@ async function initiateSession(params) {
     value_a: String(params.booking_id)
   };
 
-  return client.init(data);
+  return bounded(client.init(data));
 }
 
 /**
@@ -86,7 +95,19 @@ async function initiateSession(params) {
  */
 async function validateTransaction(valId) {
   const client = getClient();
-  return client.validate({ val_id: valId });
+  return bounded(client.validate({ val_id: valId }));
+}
+
+async function queryTransaction(tranId) {
+  return bounded(getClient().transactionQueryByTransactionId({ tran_id: tranId }));
+}
+
+function isGatewayUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password &&
+      ['securepay.sslcommerz.com', 'sandbox.sslcommerz.com'].includes(url.hostname);
+  } catch { return false; }
 }
 
 /**
@@ -127,6 +148,8 @@ module.exports = {
   generateTranId,
   initiateSession,
   validateTransaction,
+  queryTransaction,
+  isGatewayUrl,
   verifyIpnSignature,
   IS_LIVE
 };

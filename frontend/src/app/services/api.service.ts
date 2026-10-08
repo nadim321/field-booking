@@ -43,7 +43,7 @@ export class ApiService {
     // Simple JWT expiration check
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      const isExpired = Math.floor(Date.now() / 1000) >= payload.exp;
+      const isExpired = typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp || payload.role !== 'admin';
       if (isExpired) {
         this.logout();
         return false;
@@ -127,10 +127,10 @@ export class ApiService {
    * The caller is responsible for redirecting window.location to
    * gateway_page_url once the customer confirms they want to pay.
    */
-  initiatePayment(bookingId: number): Observable<any> {
+  initiatePayment(bookingId: number, idempotencyKey?: string): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/payments/initiate`, {
       booking_id: bookingId
-    });
+    }, { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} });
   }
 
   // --- Season / Recurring Booking (Customer self-serve) ---

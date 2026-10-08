@@ -1,51 +1,35 @@
-# Frontend
+# KICKOFF ARENA — turf booking
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 18.2.21.
-
-## Development server
-
-Run `ng serve` for a dev server. Navigate to `https://sale.gazipurdrughouse.com/`. The application will automatically reload if you change any of the source files.
-
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
-
-## Build
-
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
-
-## Running unit tests
-
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## cPanel Deployment
-
-আপনার টার্মিনালে নিচের তিনটি কমান্ড পর্যায়ক্রমে রান করুন:
-
-### ১. Angular বিল্ড করুন
+Angular 18 frontend, Express backend and MySQL database for turf slots, season bookings, payments and staff-managed cancellation/refund records.
 
 ```bash
-cd ~/Project/Booking/frontend && npm run build
+npm ci --prefix backend
+npm ci --prefix frontend
 ```
 
-### ২. নতুন বিল্ড ফাইল backend/public/ ফোল্ডারে কপি করুন
+Create the MySQL database, copy `backend/.env.example` to private `backend/.env`, and configure credentials. Then:
 
 ```bash
-rm -rf ~/Project/Booking/backend/public/* && cp -r ~/Project/Booking/frontend/dist/frontend/browser/. ~/Project/Booking/backend/public/
+npm run migrate --prefix backend
+npm run dev --prefix backend
+npm start --prefix frontend
 ```
 
-### ৩. ZIP তৈরি করুন
+Frontend: `http://localhost:4200`. Backend: `http://localhost:5000`. For a new installation, provision the admin with `npm run admin:create --prefix backend` using `ADMIN_USERNAME`/`ADMIN_PASSWORD` environment variables. Optional development fixtures: `npm run seed:dev --prefix backend`; no default password is seeded.
 
 ```bash
-cd ~/Project/Booking && rm -f backend_deploy.zip && zip -r backend_deploy.zip backend/ --exclude "backend/node_modules/*" --exclude "backend/.env" --exclude "backend/*.db" 
+npm run check --prefix backend
+npm test --prefix backend
+npm test --prefix frontend -- --watch=false --browsers=ChromeHeadless
+npm run build --prefix frontend
+npm run test:e2e --prefix frontend
+npm run release --prefix backend
 ```
 
-তৈরি হওয়া `backend_deploy.zip` ফাইলটি cPanel এ আপলোড করে extract করুন।
+The release ZIP appears in `artifacts/`; packaging does not deploy it. See [architecture](ARCHITECTURE.md), [deployment/monitoring/backup/restore](docs/DEPLOYMENT.md), and [cancellation policy](backend/services/bookings/CANCELLATION_POLICY.md).
 
-## Further help
+Browser tests require Playwright Chromium (or `PLAYWRIGHT_CHROMIUM_EXECUTABLE` pointing to installed Chrome) and MySQL privileges to create/drop isolated test databases. Run `RUN_DB_TESTS=1 RUN_BACKUP_TESTS=1 npm run test:integration --prefix backend` for concurrency and backup/restore checks. Verify an archive using `npm run test:release --prefix backend -- ../artifacts/booking-RELEASE.zip`.
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Payment retries reuse the persisted gateway attempt; unknown outcomes require verification. Staff can run `npm run payment:reconcile --prefix backend -- --transaction TRANSACTION_ID`. Deploy migration 003 before using these changes. Customer access and cancellation rates remain unchanged.
+
+Production error tracking is optional: set `SENTRY_DSN` for the backend and `SENTRY_FRONTEND_DSN` for the browser. The release workflow uploads private frontend source maps using GitHub Sentry secrets; see the deployment guide for setup.

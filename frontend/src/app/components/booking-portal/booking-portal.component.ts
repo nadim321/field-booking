@@ -1,6 +1,9 @@
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription, timeout } from 'rxjs';
+import { DialogDirective } from '../../directives/dialog.directive';
+import { BookingResult, PaymentOutcome, resultOutcome } from '../../services/payment-result';
 import { ApiService } from '../../services/api.service';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 
@@ -31,7 +34,7 @@ interface HoldInfo {
 @Component({
   selector: 'app-booking-portal',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DialogDirective],
   templateUrl: './booking-portal.component.html',
   styleUrl: './booking-portal.component.css'
 })
@@ -46,6 +49,33 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   policyAccepted = false;
 
   t(en: string, bn: string): string { return this.language === 'bn' ? bn : en; }
+
+  get resultTitle(): string {
+    const titles: Record<PaymentOutcome, [string, string]> = {
+      checking: ['Checking payment status…', 'পেমেন্টের অবস্থা যাচাই হচ্ছে…'],
+      success: ['Booking confirmed', 'বুকিং নিশ্চিত হয়েছে'],
+      received: ['Payment received', 'পেমেন্ট পাওয়া গেছে'],
+      approved: ['Booking approved', 'বুকিং অনুমোদিত'],
+      requested: ['Booking requested', 'বুকিং অনুরোধ পাঠানো হয়েছে'],
+      failed: ['Payment failed', 'পেমেন্ট ব্যর্থ হয়েছে'],
+      cancelled: ['Payment cancelled', 'পেমেন্ট বাতিল হয়েছে'],
+      error: ['Payment status unconfirmed', 'পেমেন্টের অবস্থা নিশ্চিত নয়'],
+      booking_cancelled: ['Booking cancelled', 'বুকিং বাতিল হয়েছে']
+    };
+    return this.t(...titles[this.paymentResultOutcome || 'error']);
+  }
+  get resultDescription(): string {
+    switch (this.paymentResultOutcome) {
+      case 'checking': return this.t('Please wait while we verify the server record.', 'সার্ভারের তথ্য যাচাই করা পর্যন্ত অপেক্ষা করুন।');
+      case 'success': return this.t('Your payment is verified and your booking is confirmed.', 'আপনার পেমেন্ট যাচাই হয়েছে এবং বুকিং নিশ্চিত।');
+      case 'received': return this.t('Payment is verified. Booking approval is still pending.', 'পেমেন্ট যাচাই হয়েছে। বুকিং অনুমোদনের অপেক্ষায়।');
+      case 'approved': return this.t('Staff approved this booking. This does not confirm an online payment.', 'কর্তৃপক্ষ বুকিং অনুমোদন করেছে। এটি অনলাইন পেমেন্টের নিশ্চয়তা নয়।');
+      case 'requested': return this.t('Your request is pending admin approval.', 'আপনার অনুরোধ অনুমোদনের অপেক্ষায় আছে।');
+      case 'failed': case 'cancelled': return this.t('The payment attempt ended. You may retry or contact the turf.', 'পেমেন্ট প্রচেষ্টা শেষ হয়েছে। আবার চেষ্টা করুন বা মাঠে যোগাযোগ করুন।');
+      case 'booking_cancelled': return this.t('This booking remains cancelled. Contact the turf about any refund due.', 'বুকিংটি বাতিল রয়েছে। ফেরতযোগ্য টাকার জন্য মাঠে যোগাযোগ করুন।');
+      default: return this.t('We could not verify payment. Check again or contact the turf with your booking ID before paying again.', 'পেমেন্ট যাচাই হয়নি। আবার টাকা দেওয়ার আগে অবস্থা যাচাই করুন বা বুকিং নম্বর নিয়ে মাঠে যোগাযোগ করুন।');
+    }
+  }
 
   toggleLanguage(): void {
     this.language = this.language === 'en' ? 'bn' : 'en';
@@ -110,6 +140,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   paymentConfirmBookingId: number | null = null;
   paymentConfirmAmount: number | null = null;
   paymentConfirmLoading: boolean = false;
+  paymentRedirecting = false;
   paymentConfirmError: string = '';
 
   // Full-page post-payment RESULT view -- shown when the customer is
@@ -117,21 +148,17 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   // One shared view with a state-driven outcome, rather than separate
   // pages, since all outcomes need the same booking summary card and only
   // the headline/actions differ.
-  paymentResultOutcome: 'success' | 'failed' | 'cancelled' | 'error' | 'requested' | 'booking_cancelled' | null = null;
-  paymentResultBooking: {
-    booking_id: number;
-    booking_date: string;
-    start_time: string;
-    end_time: string;
-    price: number;
-    amount_paid: number;
-    balance_due: number;
-    refund_amount?: number;
-    refunded_amount?: number;
-    status: string;
-    payment_status: string;
-  } | null = null;
-  paymentResultLoading: boolean = false;
+  paymentResultOutcome: PaymentOutcome | null = null;
+  paymentResultBooking: BookingResult | null = null;
+  paymentResultLoading = false;
+  private resultTimer?: ReturnType<typeof setTimeout>;
+  private resultSubscription?: Subscription;
+  private paymentTimer?: ReturnType<typeof setTimeout>;
+  private paymentSubscription?: Subscription;
+  private resultAttempts = 0;
+  private paymentAttempts = 0;
+  private paymentKeys = new Map<number, string>();
+
   paymentResultBookingId: number | null = null; // kept for "Try Again" retry
 
   // Public app settings (dynamic turf info)
@@ -158,46 +185,60 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
       }
     }, 15000);
 
-    // After a customer pays via SSLCommerz, the backend redirects back
-    // here with ?payment=success|failed|cancelled&booking_id=X (see
-    // GET /api/payments/success in server.js). Show a full-page result
-    // view (booking summary + outcome) rather than just a toast, then
-    // strip the query params so refreshing the page doesn't re-show it.
     const params = this.route.snapshot.queryParamMap;
-    const paymentResult = params.get('payment');
-    const bookingIdParam = params.get('booking_id');
+    let stored: string | null = null;
+    try { stored = sessionStorage.getItem('booking-last-result'); } catch { /* Storage unavailable. */ }
+    const bookingId = Number(params.get('booking_id') || stored);
+    if (Number.isSafeInteger(bookingId) && bookingId > 0) this.showResult(bookingId);
+    else if (params.has('payment')) this.paymentResultOutcome = 'error';
+    if (params.has('payment')) this.router.navigate([], { queryParams: {}, replaceUrl: true });
+  }
 
-    if (paymentResult === 'success' || paymentResult === 'failed' || paymentResult === 'cancelled' || paymentResult === 'error') {
-      this.paymentResultOutcome = paymentResult;
-      const bookingId = bookingIdParam ? parseInt(bookingIdParam, 10) : null;
-      this.paymentResultBookingId = bookingId;
-
-      if (bookingId) {
-        this.paymentResultLoading = true;
-        this.apiService.getBookingResult(bookingId).subscribe({
-          next: (res) => {
-            this.paymentResultLoading = false;
-            this.paymentResultBooking = res;
-            if (res.status === 'cancelled') this.paymentResultOutcome = 'booking_cancelled';
-            else if (this.paymentResultOutcome === 'success' && res.status !== 'approved') this.paymentResultOutcome = 'error';
-          },
-          error: () => {
-            this.paymentResultLoading = false;
-            // Booking summary couldn't be fetched -- the outcome message
-            // alone still tells the customer what happened, just without
-            // the detail card.
-            this.paymentResultBooking = null;
-          }
-        });
+  private rememberBooking(id: number): void {
+    try { sessionStorage.setItem('booking-last-result', String(id)); } catch { /* Storage unavailable. */ }
+  }
+  showResult(id: number): void {
+    this.rememberBooking(id);
+    this.paymentResultBookingId = id;
+    this.refreshPaymentResult();
+  }
+  refreshPaymentResult(): void {
+    clearTimeout(this.resultTimer);
+    this.resultSubscription?.unsubscribe();
+    this.resultAttempts = 0;
+    this.paymentResultOutcome = 'checking';
+    this.pollResult();
+  }
+  private pollResult(): void {
+    if (!this.paymentResultBookingId || !this.paymentResultOutcome) return;
+    this.resultAttempts++;
+    this.paymentResultLoading = true;
+    this.resultSubscription = this.apiService.getBookingResult(this.paymentResultBookingId).pipe(timeout(8000)).subscribe({
+      next: result => {
+        this.paymentResultLoading = false;
+        this.paymentResultBooking = result;
+        this.paymentResultOutcome = resultOutcome(result);
+        if (['failed', 'cancelled'].includes(this.paymentResultOutcome)) this.clearPaymentKey(result.booking_id);
+        if (this.paymentResultOutcome === 'checking') this.scheduleResultPoll();
+      },
+      error: () => {
+        this.paymentResultLoading = false;
+        this.paymentResultBooking = null;
+        this.paymentResultOutcome = 'checking';
+        this.scheduleResultPoll();
       }
-    }
-    if (paymentResult) {
-      this.router.navigate([], { queryParams: {}, replaceUrl: true });
-    }
+    });
+  }
+  private scheduleResultPoll(): void {
+    if (this.resultAttempts >= 10) { this.paymentResultOutcome = 'error'; return; }
+    this.resultTimer = setTimeout(() => this.pollResult(), 3000);
   }
 
   /** Dismisses the full-page payment result view, returning to normal browsing. */
   closePaymentResult(): void {
+    clearTimeout(this.resultTimer);
+    this.resultSubscription?.unsubscribe();
+    try { sessionStorage.removeItem('booking-last-result'); } catch { /* Storage unavailable. */ }
     this.paymentResultOutcome = null;
     this.paymentResultBooking = null;
     this.paymentResultBookingId = null;
@@ -214,6 +255,10 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.resultTimer);
+    clearTimeout(this.paymentTimer);
+    this.resultSubscription?.unsubscribe();
+    this.paymentSubscription?.unsubscribe();
     this.clearCountdown();
     if (this.slotsRefreshIntervalId) {
       clearInterval(this.slotsRefreshIntervalId);
@@ -235,7 +280,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         if (requestedDate !== this.selectedDate) return;
         this.errorMsg = this.t('Could not load slots. Please try again.', 'স্লট লোড হয়নি। আবার চেষ্টা করুন।');
         this.loading = false;
-        this.showToast('Error loading slots', 'error');
+        this.showToast(this.t('Error loading slots', 'স্লট লোড হয়নি'), 'error');
       }
     });
   }
@@ -328,7 +373,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.holdLoading = false;
-        this.showToast(err.error?.message || 'This slot just became unavailable', 'error');
+        this.showToast(this.t('This slot is unavailable. Refresh and try again.', 'স্লটটি পাওয়া যাচ্ছে না। রিফ্রেশ করে আবার চেষ্টা করুন।'), 'error');
         this.loadSlots();
       }
     });
@@ -418,7 +463,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   submitBooking(): void {
     if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || this.amountNow === null) return;
     if (!this.customerName || !this.customerPhone) {
-      this.showToast('Name and phone number are required', 'error');
+      this.showToast(this.t('Name and phone number are required', 'নাম ও মোবাইল নম্বর দিন'), 'error');
       return;
     }
 
@@ -440,6 +485,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         this.submitting = false;
         this.clearCountdown();
         const usedPaymentMethod = this.paymentMethod;
+        this.rememberBooking(res.booking_id);
 
         // Hold has already been deleted server-side as part of confirm, so
         // just clear local hold state without firing another cancel call.
@@ -455,24 +501,13 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         if (usedPaymentMethod !== 'later') {
           this.openPaymentConfirm(res.booking_id);
         } else {
-          this.showToast('Booking requested successfully! Pending admin approval.', 'success');
-          this.paymentResultOutcome = 'requested';
-          this.paymentResultBookingId = res.booking_id;
-          this.paymentResultLoading = true;
-          this.apiService.getBookingResult(res.booking_id).subscribe({
-            next: (bookingRes) => {
-              this.paymentResultLoading = false;
-              this.paymentResultBooking = bookingRes;
-            },
-            error: () => {
-              this.paymentResultLoading = false;
-            }
-          });
+          this.showToast(this.t('Booking requested. Pending admin approval.', 'বুকিং অনুরোধ পাঠানো হয়েছে। অনুমোদনের অপেক্ষায়।'), 'success');
+          this.showResult(res.booking_id);
         }
       },
       error: (err) => {
         this.submitting = false;
-        const message = err.error?.message || 'Booking submission failed';
+        const message = this.t('Booking submission failed. Your details are kept.', 'বুকিং পাঠানো যায়নি। আপনার তথ্য রাখা হয়েছে।');
         this.showToast(message, 'error');
 
         // A 400 here most likely means the hold expired or was invalidated
@@ -499,6 +534,8 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
    * button (see confirmAndPay()), not here.
    */
   openPaymentConfirm(bookingId: number): void {
+    this.rememberBooking(bookingId);
+    this.paymentRedirecting = false;
     this._pendingGatewayUrl = null;
     this.paymentConfirmBookingId = bookingId;
     this.paymentConfirmAmount = null;
@@ -506,17 +543,53 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     this.showPaymentConfirm = true;
     this.paymentConfirmLoading = true;
 
-    this.apiService.initiatePayment(bookingId).subscribe({
-      next: (res) => {
+    clearTimeout(this.paymentTimer);
+    this.paymentSubscription?.unsubscribe();
+    this.paymentAttempts = 0;
+    this.requestPayment(bookingId);
+  }
+
+  private paymentKey(id: number): string {
+    let key = this.paymentKeys.get(id);
+    try { key ||= sessionStorage.getItem('payment-key-' + id) || undefined; } catch { /* Storage unavailable. */ }
+    key ||= crypto.randomUUID();
+    this.paymentKeys.set(id, key);
+    try { sessionStorage.setItem('payment-key-' + id, key); } catch { /* Storage unavailable. */ }
+    return key;
+  }
+  private clearPaymentKey(id: number): void {
+    this.paymentKeys.delete(id);
+    try { sessionStorage.removeItem('payment-key-' + id); } catch { /* Storage unavailable. */ }
+  }
+  retryPaymentPreparation(): void {
+    if (this.paymentConfirmBookingId) this.openPaymentConfirm(this.paymentConfirmBookingId);
+  }
+  private requestPayment(bookingId: number): void {
+    this.paymentAttempts++;
+    this.paymentSubscription = this.apiService.initiatePayment(bookingId, this.paymentKey(bookingId)).pipe(timeout(25000)).subscribe({
+      next: res => {
+        if (!this.showPaymentConfirm || this.paymentConfirmBookingId !== bookingId) return;
+        if (res.state === 'initializing' && this.paymentAttempts < 10) {
+          this.paymentTimer = setTimeout(() => this.requestPayment(bookingId), 3000);
+          return;
+        }
         this.paymentConfirmLoading = false;
-        this.paymentConfirmAmount = res.amount;
-        // Stash the gateway URL for confirmAndPay() to use -- re-fetching
-        // it on click would create a second, redundant payment session.
-        this._pendingGatewayUrl = res.gateway_page_url;
+        if (res.state === 'paid') {
+          this.showPaymentConfirm = false;
+          this.showResult(bookingId);
+        } else if (res.state === 'ready' && res.gateway_page_url) {
+          this.paymentConfirmAmount = res.amount;
+          this._pendingGatewayUrl = res.gateway_page_url;
+        } else {
+          if (res.retryable) this.clearPaymentKey(bookingId);
+          this.paymentConfirmError = res.retryable
+            ? this.t('Payment attempt ended. You can try again.', 'পেমেন্ট প্রচেষ্টা শেষ হয়েছে। আবার চেষ্টা করতে পারেন।')
+            : this.t('Payment status needs verification. Contact the turf before paying again.', 'পেমেন্ট যাচাই প্রয়োজন। আবার টাকা দেওয়ার আগে মাঠে যোগাযোগ করুন।');
+        }
       },
-      error: (err) => {
+      error: () => {
         this.paymentConfirmLoading = false;
-        this.paymentConfirmError = err.error?.message || 'Failed to start payment. Your booking is still pending -- you can try paying later.';
+        this.paymentConfirmError = this.t('Could not prepare payment. Retry to check the same attempt.', 'পেমেন্ট প্রস্তুত হয়নি। একই প্রচেষ্টার অবস্থা দেখতে আবার চেষ্টা করুন।');
       }
     });
   }
@@ -526,17 +599,22 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   /** Customer clicked "Pay Now" -- this is the only place that actually
    * navigates the browser away to SSLCommerz's hosted payment page. */
   confirmAndPay(): void {
-    if (!this._pendingGatewayUrl) return;
+    if (!this._pendingGatewayUrl || this.paymentConfirmLoading) return;
+    this.paymentConfirmLoading = true;
+    this.paymentRedirecting = true;
     window.location.href = this._pendingGatewayUrl;
   }
 
   /** Customer chose to skip paying now ("Pay at the turf instead"). */
   closePaymentConfirm(): void {
+    if (this.paymentRedirecting) return;
+    clearTimeout(this.paymentTimer);
+    this.paymentSubscription?.unsubscribe();
     this.showPaymentConfirm = false;
     this.paymentConfirmBookingId = null;
     this.paymentConfirmAmount = null;
     this._pendingGatewayUrl = null;
-    this.showToast('No problem -- your booking is pending admin approval. You can pay later if you change your mind.', 'success');
+    this.showToast(this.t('Your booking is pending admin approval.', 'আপনার বুকিং অনুমোদনের অপেক্ষায় আছে।'), 'success');
   }
 
   showToast(message: string, type: 'success' | 'error'): void {
@@ -562,7 +640,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         window.URL.revokeObjectURL(url);
       },
       error: (err) => {
-        this.showToast('Failed to download booking slip PDF.', 'error');
+        this.showToast(this.t('Failed to download booking slip PDF.', 'বুকিং স্লিপ ডাউনলোড হয়নি।'), 'error');
       }
     });
   }

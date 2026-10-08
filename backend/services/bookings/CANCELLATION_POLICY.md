@@ -33,9 +33,9 @@ Published examples consulted on 2026-09-10:
 
 ## Database rollout
 
-`database.js` runs `migrations/cancellation.js` after the existing tables initialize. The migration uses an advisory lock and checks existing columns/indexes so it can run again after restart. It adds policy-acceptance columns, an active-date generated column, cancellation/settlement tables, and replaces `uq_slot_date` with `uq_active_slot_date`. It keeps all existing booking/payment records. The application DB user needs ALTER/CREATE privileges; booking confirmation and cancellation fail closed until migration succeeds.
+`database.js` explicitly initializes the pool and runs the checksummed migration runner before HTTP startup. `001-initial-schema.js` adopts or creates the base tables; `002-cancellation.js` adds policy columns, active-date uniqueness and refund history. Existing data is retained. The migration user needs CREATE/ALTER privileges. `RUN_MIGRATIONS=false` verifies the schema instead of modifying it. See the deployment guide for rollout and recovery.
 
-Before production rollout, take the normal database backup and test this migration on a staging copy using the same MySQL version. Verify a cancelled slot can be booked again, active duplicates fail, restart is safe, and cancellation/refund history prevents deletion. The local automated tests use an in-memory transaction adapter and do not validate real MySQL locking or DDL.
+Before production rollout, take the normal database backup and test this migration on a staging copy using the same MySQL version. Verify a cancelled slot can be booked again, active duplicates fail, restart is safe, and cancellation/refund history prevents deletion. Unit tests use an in-memory adapter; `RUN_DB_TESTS=1 npm run test:integration` also verifies real MySQL migrations, concurrent holds/payments and rebooking in isolated temporary databases.
 
 ## Validation
 

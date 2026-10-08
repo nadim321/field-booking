@@ -1,104 +1,28 @@
-<!-- Full-page Payment Result View -- shown after returning from
-     SSLCommerz. Covers the whole screen so the customer's attention goes
-     straight to their booking outcome, not the slot grid underneath. -->
 <div class="payment-result-overlay" *ngIf="paymentResultOutcome">
-  <div class="payment-result-card">
-
-    <div class="payment-result-icon" [ngClass]="paymentResultOutcome">
-      <span *ngIf="paymentResultOutcome === 'success'">✅</span>
-      <span *ngIf="paymentResultOutcome === 'requested'">⏳</span>
-      <span *ngIf="paymentResultOutcome === 'failed'">❌</span>
-      <span *ngIf="paymentResultOutcome === 'cancelled'">⚠️</span>
-      <span *ngIf="paymentResultOutcome === 'error'">❓</span>
+  <div class="payment-result-card" bookingDialog (dialogClose)="closePaymentResult()" aria-labelledby="result-title">
+    <div aria-live="polite" role="status">
+      <h2 id="result-title">{{ resultTitle }}</h2>
+      <p>{{ resultDescription }}</p>
     </div>
-
-    <h2 *ngIf="paymentResultOutcome === 'booking_cancelled'">{{ t('Booking cancelled', 'বুকিং বাতিল হয়েছে') }}</h2>
-    <p *ngIf="paymentResultOutcome === 'booking_cancelled'">{{ t('This booking remains cancelled. Any payment received after cancellation is refundable. Contact the turf for processing.', 'এই বুকিং বাতিল রয়েছে। বাতিলের পরে পাওয়া পেমেন্ট ফেরতযোগ্য। রিফান্ডের জন্য মাঠে যোগাযোগ করুন।') }}</p>
-    <h2 *ngIf="paymentResultOutcome === 'success'">Booking Confirmed!</h2>
-    <h2 *ngIf="paymentResultOutcome === 'requested'">Booking Requested!</h2>
-    <h2 *ngIf="paymentResultOutcome === 'failed'">Payment Failed</h2>
-    <h2 *ngIf="paymentResultOutcome === 'cancelled'">Payment Cancelled</h2>
-    <h2 *ngIf="paymentResultOutcome === 'error'">Something Went Wrong</h2>
-
-    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'success'">
-      Your advance payment was received and your turf booking is confirmed.
-    </p>
-    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'requested'">
-      Your booking request has been submitted and is pending admin approval.
-    </p>
-    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'failed'">
-      Your payment didn't go through. Your booking is still pending -- you can try again or pay at the turf.
-    </p>
-    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'cancelled'">
-      You cancelled the payment. Your booking is still pending -- you can try again or pay at the turf.
-    </p>
-    <p class="payment-result-subtitle" *ngIf="paymentResultOutcome === 'error'">
-      We couldn't confirm your payment status. If money was deducted from your account, please contact us with your
-      booking ID.
-    </p>
-
-    <!-- Loading the booking summary -->
-    <div *ngIf="paymentResultLoading" class="spinner-container">
-      <div class="spinner"></div>
-      <p>Loading booking details...</p>
+    <p *ngIf="paymentResultLoading" role="status">{{ t('Checking booking details…', 'বুকিংয়ের তথ্য যাচাই হচ্ছে…') }}</p>
+    <div class="slot-summary" *ngIf="paymentResultBooking as booking">
+      <div class="summary-item"><span>{{ t('Booking ID', 'বুকিং নম্বর') }}</span><strong>#{{ booking.booking_id }}</strong></div>
+      <div class="summary-item"><span>{{ t('Date', 'তারিখ') }}</span><span>{{ booking.booking_date }}</span></div>
+      <div class="summary-item"><span>{{ t('Time slot', 'সময়') }}</span><span>{{ formatTime12h(booking.start_time) }} – {{ formatTime12h(booking.end_time) }}</span></div>
+      <div class="summary-item"><span>{{ t('Total price', 'মোট মূল্য') }}</span><strong>৳ {{ booking.price | number:'1.2-2' }}</strong></div>
+      <div class="summary-item"><span>{{ t('Payment recorded', 'নথিভুক্ত পরিশোধ') }}</span><span>৳ {{ booking.amount_paid | number:'1.2-2' }}</span></div>
+      <div class="summary-item"><span>{{ t('Balance due', 'বাকি টাকা') }}</span><strong>৳ {{ booking.balance_due | number:'1.2-2' }}</strong></div>
+      <div class="summary-item" *ngIf="booking.refund_amount != null"><span>{{ t('Refund entitlement', 'ফেরতযোগ্য টাকা') }}</span><span>৳ {{ booking.refund_amount | number:'1.2-2' }}</span></div>
+      <div class="summary-item" *ngIf="booking.refunded_amount != null"><span>{{ t('Refund recorded', 'ফেরত দেওয়া হয়েছে') }}</span><span>৳ {{ booking.refunded_amount | number:'1.2-2' }}</span></div>
     </div>
-
-    <!-- Booking summary card -->
-    <div class="slot-summary" *ngIf="!paymentResultLoading && paymentResultBooking">
-      <div class="summary-item">
-        <span class="label">Booking ID:</span>
-        <span class="val">#{{ paymentResultBooking.booking_id }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="label">Date:</span>
-        <span class="val">{{ paymentResultBooking.booking_date }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="label">Time Slot:</span>
-        <span class="val highlight">{{ formatTime12h(paymentResultBooking.start_time) }} - {{
-          formatTime12h(paymentResultBooking.end_time) }}</span>
-      </div>
-      <div class="summary-item">
-        <span class="label">Slot Price:</span>
-        <span class="val">৳ {{ paymentResultBooking.price }}</span>
-      </div>
-      <div class="summary-item" *ngIf="paymentResultBooking.amount_paid > 0">
-        <span class="label">Amount Paid:</span>
-        <span class="val highlight">৳ {{ paymentResultBooking.amount_paid }}</span>
-      </div>
-      <div class="summary-item" *ngIf="paymentResultBooking.refund_amount != null">
-        <span>{{ t('Refund entitlement', 'ফেরতযোগ্য টাকা') }}</span><span>৳ {{ paymentResultBooking.refund_amount | number:'1.2-2' }}</span>
-      </div>
-      <div class="summary-item" *ngIf="paymentResultBooking.refunded_amount != null">
-        <span>{{ t('Refund recorded', 'ফেরত দেওয়া হয়েছে') }}</span><span>৳ {{ paymentResultBooking.refunded_amount | number:'1.2-2' }}</span>
-      </div>
-      <div class="summary-item" *ngIf="paymentResultBooking.balance_due > 0">
-        <span class="label">Balance Due (at turf):</span>
-        <span class="val">৳ {{ paymentResultBooking.balance_due }}</span>
-      </div>
-    </div>
-
-    <!-- No booking summary available (fetch failed, or no booking_id in the redirect) -->
-    <p class="payment-result-subtitle" *ngIf="!paymentResultLoading && !paymentResultBooking && paymentResultBookingId">
-      Booking ID: #{{ paymentResultBookingId }}
-    </p>
-
+    <p *ngIf="!paymentResultBooking && paymentResultBookingId">{{ t('Booking ID', 'বুকিং নম্বর') }}: #{{ paymentResultBookingId }}</p>
+    <a *ngIf="appSettings?.turf_phone" [href]="'tel:' + appSettings.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }}</a>
     <div class="modal-footer payment-result-actions">
-      <button type="button" class="btn btn-secondary"
-        *ngIf="(paymentResultOutcome === 'failed' || paymentResultOutcome === 'cancelled') && paymentResultBookingId"
-        (click)="retryPaymentFromResult()">
-        Try Payment Again
-      </button>
-      <button type="button" class="btn btn-outline"
-        *ngIf="(paymentResultOutcome === 'success' || paymentResultOutcome === 'requested') && paymentResultBooking"
-        (click)="downloadBookingSlip(paymentResultBooking.booking_id)">
-        📥 Download Booking Slip
-      </button>
-      <button type="button" class="btn btn-primary" (click)="closePaymentResult()">
-        Continue Browsing
-      </button>
+      <button class="btn btn-secondary" *ngIf="paymentResultOutcome === 'error' && paymentResultBookingId" (click)="refreshPaymentResult()">{{ t('Check status again', 'আবার অবস্থা যাচাই করুন') }}</button>
+      <button class="btn btn-secondary" *ngIf="(paymentResultOutcome === 'failed' || paymentResultOutcome === 'cancelled' || paymentResultOutcome === 'requested') && paymentResultBookingId" (click)="retryPaymentFromResult()">{{ t('Try payment', 'পেমেন্ট চেষ্টা করুন') }}</button>
+      <button class="btn btn-outline" *ngIf="paymentResultBooking && paymentResultOutcome !== 'checking'" (click)="downloadBookingSlip(paymentResultBooking.booking_id)">{{ t('Download booking slip', 'বুকিং স্লিপ ডাউনলোড') }}</button>
+      <button class="btn btn-primary" (click)="closePaymentResult()">{{ t('Continue browsing', 'স্লট দেখা চালিয়ে যান') }}</button>
     </div>
-
   </div>
 </div>
 
@@ -111,8 +35,8 @@
     </div>
     <nav>
       <button type="button" class="btn btn-secondary" (click)="toggleLanguage()" aria-label="Change booking language">{{ language === 'en' ? 'বাংলা' : 'English' }}</button>
-      <a routerLink="/season-booking" class="btn btn-secondary">📅 Season Booking</a>
-      <a routerLink="/admin/login" class="btn btn-secondary admin-btn">Admin Panel</a>
+      <a routerLink="/season-booking" class="btn btn-secondary">{{ t('📅 Season Booking', '📅 সিজন বুকিং') }}</a>
+      <a routerLink="/admin/login" class="btn btn-secondary admin-btn">{{ t('Admin Panel', 'অ্যাডমিন প্যানেল') }}</a>
     </nav>
   </header>
 
@@ -120,15 +44,15 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-content">
-      <span class="badge">🔥 Premium 7-a-side Artificial Turf</span>
+      <span class="badge">{{ t('🔥 Premium 7-a-side Artificial Turf', '🔥 উন্নত মানের ৭ জনের কৃত্রিম ঘাসের মাঠ') }}</span>
       <h1>{{ t('Select a Slot & Start Playing', 'স্লট বেছে নিন, খেলা শুরু করুন') }}</h1>
-      <p>Enjoy under-lights football with top-tier grass, spacious changing rooms, and free parking.</p>
+      <p>{{ t('Enjoy under-lights football with top-tier grass, spacious changing rooms, and free parking.', 'আলোকিত মাঠ, উন্নত ঘাস, প্রশস্ত পোশাক বদলানোর ঘর ও বিনামূল্যে পার্কিংয়ের সুবিধা উপভোগ করুন।') }}</p>
     </div>
   </section>
 
   <!-- Main Booking Area -->
   <main class="booking-section">
-    <ol class="booking-steps" aria-label="Booking steps">
+    <ol class="booking-steps" [attr.aria-label]="t('Booking steps', 'বুকিংয়ের ধাপ')">
       <li class="active">1. {{ t('Date', 'তারিখ') }}</li><li class="active">2. {{ t('Slot', 'স্লট') }}</li>
       <li>3. {{ t('Details', 'তথ্য') }}</li><li>4. {{ t('Payment', 'পেমেন্ট') }}</li>
     </ol>
@@ -137,31 +61,31 @@
       <div class="control-group">
         <label for="booking-date">{{ t('Choose Playing Date', 'খেলার তারিখ বেছে নিন') }}</label>
         <div class="input-wrapper">
-          <input type="date" id="booking-date" [(ngModel)]="selectedDate" (change)="onDateChange()" [disabled]="holdLoading"
+          <input type="date" id="booking-date" data-dialog-return [(ngModel)]="selectedDate" (change)="onDateChange()" [disabled]="holdLoading"
             class="form-control date-input" [min]="todayDate" />
         </div>
       </div>
       <div class="legend">
-        <span class="legend-item"><span class="dot available"></span> Available</span>
-        <span class="legend-item"><span class="dot held"></span> Held</span>
-        <span class="legend-item"><span class="dot season-reserved"></span> Season Booking</span>
-        <span class="legend-item"><span class="dot pending"></span> Pending Approval</span>
-        <span class="legend-item"><span class="dot booked"></span> Booked / Occupied</span>
-        <span class="legend-item"><span class="dot blocked"></span> Blocked</span>
+        <span class="legend-item"><span class="dot available"></span> {{ t('Available', 'খালি') }}</span>
+        <span class="legend-item"><span class="dot held"></span> {{ t('Held', 'সাময়িক সংরক্ষিত') }}</span>
+        <span class="legend-item"><span class="dot season-reserved"></span> {{ t('Season Booking', 'সিজন বুকিং') }}</span>
+        <span class="legend-item"><span class="dot pending"></span> {{ t('Pending Approval', 'অনুমোদনের অপেক্ষায়') }}</span>
+        <span class="legend-item"><span class="dot booked"></span> {{ t('Booked / Occupied', 'বুক করা') }}</span>
+        <span class="legend-item"><span class="dot blocked"></span> {{ t('Blocked', 'বন্ধ') }}</span>
       </div>
     </div>
 
     <!-- Error state -->
-    <div *ngIf="errorMsg" class="alert error-alert">
+    <div *ngIf="errorMsg" class="alert error-alert" role="alert">
       <span class="alert-icon">⚠️</span>
       <p>{{ errorMsg }}</p>
-      <button (click)="loadSlots()" class="btn btn-sm btn-outline">Try Again</button>
+      <button (click)="loadSlots()" class="btn btn-sm btn-outline">{{ t('Try Again', 'আবার চেষ্টা করুন') }}</button>
     </div>
 
     <!-- Loading state -->
     <div *ngIf="loading" class="spinner-container">
       <div class="spinner"></div>
-      <p>Loading Turf Availability...</p>
+      <p>{{ t('Loading Turf Availability...', 'মাঠের খালি স্লট লোড হচ্ছে…') }}</p>
     </div>
 
     <!-- Slots Grid Container -->
@@ -169,7 +93,7 @@
 
       <!-- Morning Slots (category 1) -->
       <div class="category-block" *ngIf="getSlotsByCategory(1).length > 0">
-        <h3>🌅 Morning slots</h3>
+        <h3>{{ t('🌅 Morning slots', '🌅 সকালের স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory(1)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -178,9 +102,9 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
@@ -188,7 +112,7 @@
 
       <!-- Afternoon Slots (category 2) -->
       <div class="category-block" *ngIf="getSlotsByCategory(2).length > 0">
-        <h3>☀️ Afternoon slots</h3>
+        <h3>{{ t('☀️ Afternoon slots', '☀️ দুপুরের স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory(2)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -197,9 +121,9 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
@@ -207,7 +131,7 @@
 
       <!-- Evening Slots (category 3) -->
       <div class="category-block" *ngIf="getSlotsByCategory(3).length > 0">
-        <h3>🌇 Evening slots</h3>
+        <h3>{{ t('🌇 Evening slots', '🌇 বিকেলের স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory(3)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -216,9 +140,9 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
@@ -226,7 +150,7 @@
 
       <!-- Night Slots (category 4) -->
       <div class="category-block" *ngIf="getSlotsByCategory(4).length > 0">
-        <h3>🌃 Under-Lights Night slots</h3>
+        <h3>{{ t('🌃 Under-Lights Night slots', '🌃 রাতের স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory(4)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -235,9 +159,9 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
@@ -245,7 +169,7 @@
 
       <!-- Midnight Slots (category 5) -->
       <div class="category-block" *ngIf="getSlotsByCategory(5).length > 0">
-        <h3>🌙 Midnight slots</h3>
+        <h3>{{ t('🌙 Midnight slots', '🌙 মধ্যরাতের স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getSlotsByCategory(5)" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -254,9 +178,9 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
@@ -265,7 +189,7 @@
       <!-- Other / uncategorized slots -- shown so nothing silently
            disappears while waiting for an admin to assign a category -->
       <div class="category-block" *ngIf="getUncategorizedSlots().length > 0">
-        <h3>📋 Other slots</h3>
+        <h3>{{ t('📋 Other slots', '📋 অন্যান্য স্লট') }}</h3>
         <div class="slots-grid">
           <div *ngFor="let slot of getUncategorizedSlots()" class="slot-card" [ngClass]="{
               'status-available': slot.status === 'available',
@@ -274,16 +198,16 @@
               'status-pending': slot.status === 'pending',
               'status-booked': slot.status === 'approved',
               'status-blocked': slot.status === 'blocked'
-            }" (click)="onSlotClick(slot)">
+            }" role="button" [attr.tabindex]="slot.status === 'available' ? 0 : -1" [attr.aria-disabled]="slot.status !== 'available'" (keydown.enter)="onSlotClick(slot)" (keydown.space)="$event.preventDefault(); onSlotClick(slot)" (click)="onSlotClick(slot)">
             <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
+            <div class="price">৳ {{ slot.price }} / {{ t('Hr', 'ঘণ্টা') }}</div>
             <div class="status-badge">{{ statusLabel(slot.status) }}</div>
           </div>
         </div>
       </div>
 
       <div *ngIf="slots.length === 0" class="no-slots">
-        <p>No active slots available for this date. Please configure turf slots in admin panel.</p>
+        <p>{{ t('No active slots available for this date. Please configure turf slots in admin panel.', 'এই তারিখে কোনো স্লট পাওয়া যাচ্ছে না। অন্য তারিখ দেখুন।') }}</p>
       </div>
 
     </div>
@@ -298,24 +222,24 @@
 
 <!-- Booking Modal Dialog -->
 <div class="modal-backdrop" *ngIf="showModal">
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="booking-title">
+  <div class="modal-card" bookingDialog [dialogBusy]="submitting" (dialogClose)="closeBookingModal()" aria-labelledby="booking-title">
     <div class="modal-header">
       <h2 id="booking-title">{{ bookingStep === 'details' ? t('3. Your details', '৩. আপনার তথ্য') : t('4. Review & payment', '৪. যাচাই ও পেমেন্ট') }}</h2>
-      <button class="close-btn" aria-label="Close booking" [disabled]="submitting" (click)="closeBookingModal()">&times;</button>
+      <button class="close-btn" [attr.aria-label]="t('Close booking', 'বুকিং বন্ধ করুন')" [disabled]="submitting" (click)="closeBookingModal()">&times;</button>
     </div>
 
     <div class="modal-body">
       <div class="slot-summary">
         <div class="summary-item">
-          <span class="label">Date:</span>
+          <span class="label">{{ t('Date:', 'তারিখ:') }}</span>
           <span class="val">{{ selectedDate }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">Time Slot:</span>
+          <span class="label">{{ t('Time Slot:', 'সময়:') }}</span>
           <span class="val highlight">{{ formatTimeRange(selectedSlot) }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">Price:</span>
+          <span class="label">{{ t('Price:', 'মূল্য:') }}</span>
           <span class="val highlight">৳ {{ selectedSlot?.price }}</span>
         </div>
       </div>
@@ -334,7 +258,7 @@
           <label for="custName">{{ t('Customer Name', 'আপনার নাম') }} <span class="req">*</span></label>
           <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required
             autocomplete="name" maxlength="255" [placeholder]="t('Enter your name', 'আপনার নাম')" #nameInput="ngModel" />
-          <span class="form-err" *ngIf="nameInput.touched && !customerName">Name is required</span>
+          <span class="form-err" *ngIf="nameInput.touched && !customerName">{{ t('Name is required', 'নাম দিন') }}</span>
         </div>
 
         <div class="form-group">
@@ -347,7 +271,7 @@
         <div class="form-group">
           <label for="teamName">{{ t('Team Name', 'দলের নাম') }} <span class="opt">{{ t('(Optional)', '(ঐচ্ছিক)') }}</span></label>
           <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control"
-            placeholder="e.g. Dream Team FC" />
+            [placeholder]="t('e.g. Dream Team FC', 'যেমন: ড্রিম টিম এফসি')" />
         </div>
 
         <div class="form-group">
@@ -402,7 +326,7 @@
               <p>{{ t('Know your options before you book.', 'বুকিংয়ের আগে জেনে নিন আপনার সুযোগগুলো।') }}</p></div>
           </div>
           <ng-container *ngIf="appSettings?.cancellation_policy as policy; else policyUnavailable">
-            <div class="refund-tiers" aria-label="Refund windows">
+            <div class="refund-tiers" [attr.aria-label]="t('Refund windows', 'রিফান্ডের সময়সীমা')">
               <div class="refund-tier" *ngFor="let tier of policy.tiers; let i = index" [class.refund-tier-full]="tier.refund_percent === 100">
                 <span class="refund-window">{{ tier.minimum_hours > 0 ? (i === 0 ? tier.minimum_hours + '+ ' + t('hrs before', 'ঘণ্টা আগে') : tier.minimum_hours + '–' + policy.tiers[i - 1].minimum_hours + ' ' + t('hrs before', 'ঘণ্টা আগে')) : t('Under 24 hrs', '২৪ ঘণ্টার কম') }}</span>
                 <strong>{{ tier.refund_percent }}<span>%</span></strong>
@@ -441,10 +365,10 @@
 <!-- Payment Confirmation Modal -- shown after booking is created with a
      paid method selected, before redirecting to SSLCommerz -->
 <div class="modal-backdrop" *ngIf="showPaymentConfirm">
-  <div class="modal-card">
+  <div class="modal-card" bookingDialog [dialogBusy]="paymentRedirecting" (dialogClose)="closePaymentConfirm()" aria-labelledby="payment-title">
     <div class="modal-header">
-      <h2>{{ t('Confirm Advance Payment', 'অগ্রিম পেমেন্ট নিশ্চিত করুন') }}</h2>
-      <button class="close-btn" (click)="closePaymentConfirm()">&times;</button>
+      <h2 id="payment-title">{{ t('Confirm Advance Payment', 'অগ্রিম পেমেন্ট নিশ্চিত করুন') }}</h2>
+      <button class="close-btn" [attr.aria-label]="t('Close payment', 'পেমেন্ট বন্ধ করুন')" [disabled]="paymentRedirecting" (click)="closePaymentConfirm()">&times;</button>
     </div>
 
     <div class="modal-body">
@@ -461,7 +385,7 @@
       <div *ngIf="!paymentConfirmLoading && !paymentConfirmError && paymentConfirmAmount !== null">
         <div class="slot-summary">
           <div class="summary-item">
-            <span class="label">Booking ID:</span>
+            <span class="label">{{ t('Booking ID:', 'বুকিং নম্বর:') }}</span>
             <span class="val">#{{ paymentConfirmBookingId }}</span>
           </div>
           <div class="summary-item">
@@ -470,16 +394,16 @@
           </div>
         </div>
         <p class="form-err" style="margin-top: 0.5rem;">
-          The remaining balance can be paid at the turf. Your booking will be confirmed automatically once this advance
-          payment is verified.
+          {{ t('The balance is due at the turf. Booking confirmation follows verified advance payment.', 'বাকি টাকা মাঠে পরিশোধযোগ্য। অগ্রিম পেমেন্ট যাচাইয়ের পরে বুকিং নিশ্চিত হবে।') }}
         </p>
       </div>
 
+      <button *ngIf="paymentConfirmError" class="btn btn-secondary" (click)="retryPaymentPreparation()">{{ t('Check payment attempt', 'পেমেন্ট প্রচেষ্টা যাচাই করুন') }}</button>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" (click)="closePaymentConfirm()">{{ t('Pay at Turf Instead', 'মাঠে পেমেন্ট করুন') }}</button>
-        <button type="button" class="btn btn-primary" [disabled]="paymentConfirmLoading || !!paymentConfirmError"
+        <button type="button" class="btn btn-secondary" [disabled]="paymentRedirecting" (click)="closePaymentConfirm()">{{ t('Pay at Turf Instead', 'মাঠে পেমেন্ট করুন') }}</button>
+        <button type="button" class="btn btn-primary" [disabled]="paymentConfirmLoading || !!paymentConfirmError || paymentConfirmAmount === null"
           (click)="confirmAndPay()">
-          Pay Now
+          {{ t('Pay Now', 'এখন পেমেন্ট করুন') }}
         </button>
       </div>
     </div>

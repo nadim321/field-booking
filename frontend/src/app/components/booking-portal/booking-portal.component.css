@@ -861,6 +861,10 @@
 }
 .review-customer { overflow-wrap:anywhere; }
 [hidden] { display:none !important; }
+[role="button"]:focus-visible, a:focus-visible { outline:3px solid #34d399; outline-offset:3px; }
+.payment-result-card { max-height:95dvh; overflow:auto; }
+.summary-item { gap:12px; flex-wrap:wrap; }
+.payment-result-actions { flex-wrap:wrap; }
 button:focus-visible, input:focus-visible { outline:3px solid #34d399; outline-offset:3px; }
 @media (max-width:600px) {
   .navbar { flex-wrap:wrap; gap:12px; }
