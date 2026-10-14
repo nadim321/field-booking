@@ -1,4 +1,5 @@
 module.exports = app => {
+  app.use(require('./calendar.routes'));
   app.use(require('./settings.routes'));
   app.use(require('./auth.routes'));
   app.use(require('./bookings.routes'));

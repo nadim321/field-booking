@@ -1,0 +1,84 @@
+<section class="calendar" aria-labelledby="calendar-title">
+  <div class="calendar-heading">
+    <div><span class="eyebrow">YOUR TURF, AT A GLANCE</span><h2 id="calendar-title">Booking Calendar</h2><p>Every slot. Every day. All times in Bangladesh (UTC+06:00).</p></div>
+    <div class="view-switch" aria-label="Calendar view">
+      <button type="button" [attr.aria-pressed]="view === 'week'" (click)="changeView('week')">Week</button>
+      <button type="button" [attr.aria-pressed]="view === 'day'" (click)="changeView('day')">Day</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="navigation">
+      <button type="button" aria-label="Previous period" (click)="move(-1)">←</button>
+      <button type="button" (click)="today()">Today</button>
+      <button type="button" aria-label="Next period" (click)="move(1)">→</button>
+      <label class="date-control">Go to date <input type="date" aria-label="Calendar date" [ngModel]="selectedDate" (ngModelChange)="changeDate($event)" data-dialog-return /></label>
+    </div>
+    <button type="button" class="refresh" [disabled]="loading" (click)="refresh()">{{ loading ? 'Refreshing…' : 'Refresh' }}</button>
+  </div>
+  <div class="range-line">
+    <h3>{{ range[0] + 'T00:00:00Z' | date:'d MMM yyyy':'UTC' }}<ng-container *ngIf="view === 'week'"> – {{ range[1] + 'T00:00:00Z' | date:'d MMM yyyy':'UTC' }}</ng-container></h3>
+    <span *ngIf="data">Updated {{ data.server_time | date:'h:mm:ss a':'+0600' }} · Auto-refresh 30s</span>
+  </div>
+  <div *ngIf="error" class="error" role="alert">{{ error }} <button type="button" (click)="refresh()" [disabled]="loading">Retry</button></div>
+  <p *ngIf="!data && loading" class="empty" role="status">Loading slot availability…</p>
+
+  <ng-container *ngIf="data">
+    <div class="legend" aria-label="Slot status totals for displayed dates">
+      <div *ngFor="let status of statuses" class="legend-item" [attr.data-status]="status.key">
+        <svg class="status-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path [attr.d]="status.icon" /></svg><span>{{ status.label }}</span><strong>{{ data.counts[status.key] }}</strong>
+      </div>
+    </div>
+    <p *ngIf="!rows.length" class="empty">No slots configured. Add slots in Slot Setup to see the calendar.</p>
+    <div *ngIf="rows.length" class="table-scroll" role="region" aria-label="Slot booking calendar" tabindex="0" [attr.aria-busy]="loading" [class.stale]="error">
+      <table [class.week]="view === 'week'">
+        <caption class="sr-only">{{ view === 'week' ? 'Weekly' : 'Daily' }} availability. Select a slot for details.</caption>
+        <thead><tr><th scope="col" class="time-header">Time slot</th><th scope="col" *ngFor="let date of data.dates" [class.today]="isToday(date)"><span>{{ date + 'T00:00:00Z' | date:'EEE':'UTC' }}</span><strong>{{ date + 'T00:00:00Z' | date:'d MMM':'UTC' }}</strong><small *ngIf="isToday(date)">Today</small></th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of rows; trackBy: trackRow">
+            <th scope="row" class="time-header"><strong>{{ formatTime(row.slot.start_time) }}</strong><span>{{ formatTime(row.slot.end_time) }}{{ overnight(row.slot) ? ' (+1 day)' : '' }}</span><small>Slot #{{ row.slot.id }} · ৳{{ row.slot.price | number:'1.0-2' }}{{ !row.slot.is_active ? ' · Inactive' : '' }}</small></th>
+            <td *ngFor="let cell of row.cells; trackBy: trackCell" [class.today]="isToday(cell.date)">
+              <button type="button" class="slot-cell" [attr.data-status]="cell.status" [attr.data-testid]="'calendar-cell-' + cell.date + '-' + cell.slot_id" (click)="selectedKey = cellKey(cell)" [attr.aria-label]="cell.date + ', ' + formatTime(row.slot.start_time) + ', slot ' + row.slot.id + ', ' + statusLabel(cell.status) + (cell.conflict ? ', booking conflict' : '')">
+                <span class="cell-status"><svg class="status-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path [attr.d]="statusIcon(cell.status)" /></svg>{{ statusLabel(cell.status) }}</span>
+                <span *ngIf="cell.booking" class="cell-detail">{{ cell.booking.team_name || cell.booking.customer_name }}</span>
+                <span *ngIf="!cell.booking && cell.seasons.length" class="cell-detail">{{ cell.seasons[0].team_name || cell.seasons[0].customer_name }}</span>
+                <span *ngIf="cell.conflict" class="conflict">⚠ Booking exists</span>
+                <span *ngIf="!row.slot.is_active && cell.status !== 'inactive'" class="cell-detail">Inactive slot</span>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </ng-container>
+</section>
+
+<div *ngIf="selectedKey" class="dialog-overlay">
+  <section bookingDialog (dialogClose)="selectedKey = null" aria-labelledby="slot-detail-title" class="slot-dialog">
+    <div class="dialog-heading"><h2 id="slot-detail-title">Slot details</h2><button type="button" aria-label="Close slot details" (click)="selectedKey = null">✕</button></div>
+    <p *ngIf="error" class="error">Displayed data may be out of date. Close this dialog and retry.</p>
+    <ng-container *ngIf="selectedCell as cell; else removed">
+      <ng-container *ngIf="selectedSlot as slot">
+        <div class="detail-status" [attr.data-status]="cell.status"><svg class="status-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path [attr.d]="statusIcon(cell.status)" /></svg>{{ statusLabel(cell.status) }}</div>
+        <p class="detail-date">{{ cell.date + 'T00:00:00Z' | date:'EEEE, d MMMM yyyy':'UTC' }}</p>
+        <p>{{ formatTime(slot.start_time) }} – {{ formatTime(slot.end_time) }}{{ overnight(slot) ? ' (+1 day)' : '' }} · Bangladesh time</p>
+        <p>Slot #{{ slot.id }} · Price ৳{{ slot.price | number:'1.2-2' }}</p>
+        <p *ngIf="cell.is_past" class="note">This slot has ended.</p>
+        <p *ngIf="!slot.is_active" class="note">This slot configuration is inactive.</p>
+        <p *ngIf="cell.conflict" class="error">A staff block overlaps an existing booking. Review both records in Bookings and Bulk Blocking.</p>
+        <dl *ngIf="cell.booking as booking">
+          <dt>Booking</dt><dd>#{{ booking.id }} · {{ booking.status }}</dd>
+          <dt>Customer</dt><dd>{{ booking.customer_name }}</dd><dt>Phone</dt><dd>{{ booking.customer_phone }}</dd>
+          <ng-container *ngIf="booking.team_name"><dt>Team</dt><dd>{{ booking.team_name }}</dd></ng-container>
+          <dt>Payment status</dt><dd>{{ booking.payment_status }}</dd><dt>Amount received</dt><dd>৳{{ booking.amount_paid | number:'1.2-2' }}</dd><dt>Balance due</dt><dd>৳{{ booking.balance_due | number:'1.2-2' }}</dd>
+        </dl>
+        <p *ngIf="cell.block_reason"><strong>Block reason:</strong> {{ cell.block_reason }}</p>
+        <p *ngIf="cell.hold_expires_at"><strong>Hold expires:</strong> {{ cell.hold_expires_at | date:'d MMM, h:mm:ss a':'+0600' }}. Availability is rechecked on refresh.</p>
+        <div *ngFor="let season of cell.seasons" class="season-details"><h3>Season reservation #{{ season.id }}</h3><p>{{ season.team_name || season.customer_name }} · {{ season.customer_phone }}</p><p>{{ season.start_date }} – {{ season.end_date }}</p></div>
+        <p *ngIf="cell.status === 'available'">This slot is available as of the last refresh.</p>
+        <p class="note">View only. Manage records in Bookings, Season Requests, Slot Setup or Bulk Blocking.</p>
+      </ng-container>
+    </ng-container>
+    <ng-template #removed><p>This slot is no longer in the latest calendar. Close this dialog to continue.</p></ng-template>
+  </section>
+</div>

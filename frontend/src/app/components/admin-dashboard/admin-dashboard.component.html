@@ -1,4 +1,4 @@
-<div class="dashboard-wrapper">
+<div class="dashboard-wrapper" [class.calendar-active]="activeTab === 'calendar'">
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -7,6 +7,9 @@
     </div>
 
     <nav class="sidebar-menu">
+      <button (click)="activeTab = 'calendar'" [class.active]="activeTab === 'calendar'" class="menu-item">
+        <span class="menu-icon">▦</span> Booking Calendar
+      </button>
       <button (click)="activeTab = 'overview'" [class.active]="activeTab === 'overview'" class="menu-item">
         <span class="menu-icon">📊</span> Overview
       </button>
@@ -48,6 +51,7 @@
 
     <!-- Content Body -->
     <main class="content-body">
+      <app-admin-calendar *ngIf="activeTab === 'calendar'"></app-admin-calendar>
 
       <!-- ================= OVERVIEW TAB ================= -->
       <section *ngIf="activeTab === 'overview'" class="tab-content fade-in">

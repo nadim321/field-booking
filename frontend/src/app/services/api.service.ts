@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject, tap } from 'rxjs';
+import { CalendarResponse } from './calendar';
 
 @Injectable({
   providedIn: 'root'
@@ -154,6 +155,12 @@ export class ApiService {
   }
 
   // --- Admin Dashboard Methods ---
+  getAdminCalendar(startDate: string, endDate: string): Observable<CalendarResponse> {
+    return this.http.get<CalendarResponse>(`${this.apiUrl}/admin/calendar`, {
+      params: { start_date: startDate, end_date: endDate }, headers: this.getAuthHeaders()
+    });
+  }
+
   getAdminBookings(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/admin/bookings`, {
       headers: this.getAuthHeaders()

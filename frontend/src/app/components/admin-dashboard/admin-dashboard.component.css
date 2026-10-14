@@ -13,6 +13,51 @@
   position: relative;
 }
 
+.content-area { min-width: 0; }
+.sidebar { flex-shrink: 0; }
+
+/* Dark calendar workspace with brighter navigation accents. */
+.calendar-active .content-area {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+.calendar-active .content-header {
+  background: #111d30;
+  border-color: #34465f;
+}
+
+.calendar-active .header-title h1 { color: #f1f5f9; }
+.calendar-active .header-title p { color: #b6c4d6; }
+.calendar-active .header-actions .btn {
+  background: #152236;
+  border: 1px solid #60748e;
+  color: #7dd3fc;
+}
+.calendar-active .header-actions .btn:hover { background: #17334c; }
+.calendar-active .sidebar .menu-item.active { background: #1d4ed8; color: #ffffff; }
+.calendar-active .sidebar .btn-logout { color: #fca5a5; }
+.calendar-active .sidebar .btn-logout:hover { background: #991b1b; color: #ffffff; }
+.calendar-active .menu-item:focus-visible,
+.calendar-active .btn:focus-visible,
+.calendar-active .btn-logout:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+  .dashboard-wrapper { flex-direction: column; }
+  .dashboard-wrapper .sidebar { position: static; width: 100%; height: auto; }
+  .dashboard-wrapper .sidebar-brand { padding: 12px 16px; }
+  .dashboard-wrapper .sidebar-menu { flex-direction: row; overflow-x: auto; padding: 8px; }
+  .dashboard-wrapper .menu-item { white-space: nowrap; padding: 10px; font-size: 12px; }
+  .dashboard-wrapper .sidebar-footer { padding: 8px 16px; }
+  .dashboard-wrapper .btn-logout { width: auto; padding: 6px 12px; font-size: 12px; }
+  .dashboard-wrapper .content-header { padding: 16px; flex-wrap: wrap; gap: 12px; }
+  .dashboard-wrapper .content-header h1 { font-size: 22px; }
+  .dashboard-wrapper .content-body { padding: 12px; }
+}
+
 /* Sidebar Layout */
 .sidebar {
   width: 260px;

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { AdminCalendarComponent } from '../admin-calendar/admin-calendar.component';
 
 interface BookingRecord {
   id: number;
@@ -71,7 +72,7 @@ const CATEGORY_LABEL_BY_ID: Record<number, string> = SLOT_CATEGORIES.reduce(
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AdminCalendarComponent],
   templateUrl: './admin-dashboard.component.html',
   styleUrl: './admin-dashboard.component.css'
 })
@@ -80,7 +81,7 @@ export class AdminDashboardComponent implements OnInit {
   private router = inject(Router);
 
   // Tabs navigation
-  activeTab: 'overview' | 'bookings' | 'season' | 'slots' | 'blocking' = 'overview';
+  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'blocking' = 'calendar';
 
   // Stats Data
   stats: any = null;

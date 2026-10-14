@@ -2,6 +2,8 @@
 
 Angular 18 frontend, Express backend and MySQL database for turf slots, season bookings, payments and staff-managed cancellation/refund records.
 
+Admins land on the [booking calendar](docs/ADMIN_CALENDAR.md): weekly/daily slot availability with booking, hold, season and block details in Bangladesh time.
+
 ```bash
 npm ci --prefix backend
 npm ci --prefix frontend
