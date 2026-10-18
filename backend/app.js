@@ -3,8 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('node:path');
 const fs = require('node:fs');
-const { Readable } = require('node:stream');
-const { pipeline } = require('node:stream/promises');
 const db = require('./database');
 const { requestLog, errorHandler } = require('./middleware/observability');
 const config = require('./config/env');
@@ -51,60 +49,18 @@ function createApp({ publicPath = path.join(__dirname, 'public'), frontendUrl = 
     app.use(express.static(publicPath));
     app.get('*', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
   } else {
-    app.use(async (req, res) => {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
-        return res.status(404).json({ message: 'Route not found' });
-      }
-      if (!frontendUrl) return res.status(502).json({ message: 'Frontend service is not configured' });
-      let upstreamBase;
-      let upstreamUrl;
+    app.get('/', (req, res) => res.json({ service: 'booking-api', status: 'ok' }));
+    app.get('/season-booking', (req, res) => {
+      if (!frontendUrl) return res.status(404).json({ message: 'Frontend service is not configured' });
       try {
-        upstreamBase = new URL(frontendUrl);
-        if (!['http:', 'https:'].includes(upstreamBase.protocol) || upstreamBase.username || upstreamBase.password || upstreamBase.pathname !== '/' || upstreamBase.search || upstreamBase.hash) {
-          throw new Error('Invalid frontend URL');
-        }
-        const requestUrl = new URL(req.originalUrl, 'http://backend.invalid');
-        upstreamUrl = new URL(upstreamBase.origin);
-        upstreamUrl.pathname = requestUrl.pathname;
-        upstreamUrl.search = requestUrl.search;
+        const target = new URL('/season-booking', frontendUrl);
+        if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Invalid frontend URL');
+        res.redirect(302, target.toString());
       } catch {
-        return res.status(502).json({ message: 'Frontend service URL is invalid' });
-      }
-
-      const headers = {};
-      for (const name of ['accept', 'accept-language', 'if-none-match', 'if-modified-since', 'range']) {
-        if (req.headers[name]) headers[name] = req.headers[name];
-      }
-      try {
-        const requestOptions = {
-          method: req.method,
-          headers,
-          redirect: 'manual',
-          signal: AbortSignal.timeout(15000)
-        };
-        let upstream = await fetch(upstreamUrl, requestOptions);
-        // Static hosts may not have an SPA rewrite configured. Let Angular
-        // handle extensionless client routes when the upstream returns 404.
-        if (upstream.status === 404 && req.method === 'GET' && !path.extname(upstreamUrl.pathname)) {
-          await upstream.body?.cancel();
-          upstream = await fetch(new URL('/', upstreamBase), requestOptions);
-        }
-        res.status(upstream.status);
-        upstream.headers.forEach((value, name) => {
-          if (!['connection', 'content-encoding', 'content-length', 'keep-alive', 'transfer-encoding', 'upgrade'].includes(name.toLowerCase())) {
-            res.setHeader(name, value);
-          }
-        });
-        if (upstream.body && req.method !== 'HEAD') {
-          await pipeline(Readable.fromWeb(upstream.body), res);
-        } else {
-          res.end();
-        }
-      } catch {
-        if (res.headersSent) return res.destroy();
-        return res.status(502).json({ message: 'Frontend service is unavailable' });
+        res.status(500).json({ message: 'Frontend service URL is invalid' });
       }
     });
+    app.use((req, res) => res.status(404).json({ message: 'Route not found' }));
   }
   app.use(errorHandler);
   return app;

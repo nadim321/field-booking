@@ -6,15 +6,14 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject, Subject, tap } from 'rxjs';
 import { CalendarResponse } from './calendar';
 import { AdminStats } from './admin-stats';
+import { resolveApiBaseUrl } from './api-base-url';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ApiService {
   private http = inject(HttpClient);
-  private apiUrl = window.location.hostname === 'localhost'
-    ? 'http://localhost:5000/api'
-    : '/api';
+  private apiUrl = resolveApiBaseUrl(window.location.hostname, window.__BOOKING_RUNTIME_CONFIG__?.apiBaseUrl);
 
   readonly settingsChanges = new Subject<void>();
 
