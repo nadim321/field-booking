@@ -14,8 +14,8 @@ async function summary() {
       COALESCE(SUM(amount_paid), 0) AS received_amount,
       COALESCE(SUM(CASE WHEN status = 'approved' THEN GREATEST(booking_price - amount_paid, 0) ELSE 0 END), 0) AS approved_outstanding,
       COALESCE(SUM(CASE WHEN status = 'pending' THEN GREATEST(booking_price - amount_paid, 0) ELSE 0 END), 0) AS pending_outstanding,
-      COALESCE(SUM(price_source = 'legacy_estimate'), 0) AS legacy_estimate_count,
-      COALESCE(SUM(payment_status = 'paid' AND amount_paid <= 0), 0) AS missing_paid_amount_count
+      COALESCE(SUM(CASE WHEN price_source = 'legacy_estimate' THEN 1 ELSE 0 END), 0) AS legacy_estimate_count,
+      COALESCE(SUM(CASE WHEN payment_status = 'paid' AND amount_paid <= 0 THEN 1 ELSE 0 END), 0) AS missing_paid_amount_count
       FROM bookings`);
     const [[refunds]] = await connection.query(`SELECT
       COALESCE((SELECT SUM(amount) FROM refund_settlements), 0) AS refunded_amount,

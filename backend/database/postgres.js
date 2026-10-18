@@ -37,6 +37,7 @@ function translate(sql, values = []) {
     .replace(/UNIX_TIMESTAMP\(CURRENT_TIMESTAMP\(3\)\)/gi, 'EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)')
     .replace(/\bTIME\(([^()]+)\)/gi, '($1)::time')
     .replace(/\bGROUP_CONCAT\(DISTINCT\s+([^\s)]+)\s+ORDER BY\s+([^\s)]+)\s+SEPARATOR\s+'([^']*)'\)/gi, "STRING_AGG(DISTINCT $1, '$3' ORDER BY $2)")
+    .replace(/\bDATE_FORMAT\(\s*([\w.]+)\s*,\s*'%Y-%m-%d'\s*\)/gi, "TO_CHAR($1, 'YYYY-MM-DD')")
     .replace(/\bUTC_TIMESTAMP\(\s*\)/gi, 'CURRENT_TIMESTAMP')
     .replace(/\bUNIX_TIMESTAMP\(([^()]+)\)/gi, "EXTRACT(EPOCH FROM $1)")
     .replace(/\bDATE_ADD\(CURRENT_TIMESTAMP,\s*INTERVAL\s+(\?)\s+(MINUTE|HOUR|DAY)\)/gi, "(CURRENT_TIMESTAMP + ($1 * INTERVAL '1 $2'))")
@@ -75,6 +76,7 @@ function isRead(sql) { return /^\s*(SELECT|WITH|SHOW)\b/i.test(sql); }
 function wrapConnection(client, poolClient = false) {
   const connection = {
     isPostgres: true,
+    promise() { return connection; },
     connection: { query(sql, values) { return { stream: () => { throw new Error('PostgreSQL query streaming is not configured'); } }; } },
     async query(sql, values = [], callback) {
       if (typeof values === 'function') { callback = values; values = []; }
