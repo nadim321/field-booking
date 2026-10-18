@@ -1,7 +1,11 @@
+import { CollectionHistory, CollectionReport } from './collections';
+import { NotificationPage, NotificationDetail } from './notifications';
+import { VenueSettings, VenueUpdate, VenueMedia } from './venue-settings';
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, BehaviorSubject, tap } from 'rxjs';
+import { Observable, BehaviorSubject, Subject, tap } from 'rxjs';
 import { CalendarResponse } from './calendar';
+import { AdminStats } from './admin-stats';
 
 @Injectable({
   providedIn: 'root'
@@ -11,6 +15,8 @@ export class ApiService {
   private apiUrl = window.location.hostname === 'localhost'
     ? 'http://localhost:5000/api'
     : '/api';
+
+  readonly settingsChanges = new Subject<void>();
 
   // Auth State
   private tokenSubject = new BehaviorSubject<string | null>(localStorage.getItem('admin_token'));
@@ -161,9 +167,19 @@ export class ApiService {
     });
   }
 
-  getAdminBookings(): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}/admin/bookings`, {
-      headers: this.getAuthHeaders()
+  getAdminBookings(filters: { q?: string; date_from?: string; date_to?: string; status?: string; payment_status?: string; page?: number; page_size?: number } = {}): Observable<{ items: any[]; page: number; page_size: number; total: number }> {
+    const params: Record<string, string> = {};
+    for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') params[key] = String(value);
+    return this.http.get<{ items: any[]; page: number; page_size: number; total: number }>(`${this.apiUrl}/admin/bookings`, {
+      params, headers: this.getAuthHeaders()
+    });
+  }
+
+  exportAdminBookings(filters: { q?: string; date_from?: string; date_to?: string; status?: string; payment_status?: string } = {}): Observable<Blob> {
+    const params: Record<string, string> = {};
+    for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') params[key] = String(value);
+    return this.http.get(`${this.apiUrl}/admin/bookings/export`, {
+      params, headers: this.getAuthHeaders(), responseType: 'blob'
     });
   }
 
@@ -232,8 +248,8 @@ export class ApiService {
     });
   }
 
-  getAdminStats(): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/admin/stats`, {
+  getAdminStats(): Observable<AdminStats> {
+    return this.http.get<AdminStats>(`${this.apiUrl}/admin/stats`, {
       headers: this.getAuthHeaders()
     });
   }
@@ -270,22 +286,55 @@ export class ApiService {
     });
   }
 
+  getCollectionHistory(id:number): Observable<CollectionHistory> {
+    return this.http.get<CollectionHistory>(`${this.apiUrl}/admin/bookings/${id}/collections`,{headers:this.getAuthHeaders()});
+  }
+  recordCollection(id:number,data:{amount:string;method:string;reference:string;note:string;request_key:string}): Observable<{collection_id:number}> {
+    return this.http.post<{collection_id:number}>(`${this.apiUrl}/admin/bookings/${id}/collections`,data,{headers:this.getAuthHeaders()});
+  }
+  reverseCollection(id:number,data:{reason:string;request_key:string}): Observable<{collection_id:number}> {
+    return this.http.post<{collection_id:number}>(`${this.apiUrl}/admin/collections/${id}/reverse`,data,{headers:this.getAuthHeaders()});
+  }
+  getCollections(params:Record<string,string>): Observable<CollectionReport> {
+    return this.http.get<CollectionReport>(`${this.apiUrl}/admin/collections`,{headers:this.getAuthHeaders(),params});
+  }
+  exportCollections(params:Record<string,string>): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/admin/collections/export`,{headers:this.getAuthHeaders(),params,responseType:'blob'});
+  }
+
+  getNotifications(filters: {page: number; booking_id: number | null; event: string; status: string}): Observable<NotificationPage> {
+    const params: Record<string,string> = { page: String(filters.page) };
+    if (filters.booking_id !== null) params['booking_id'] = String(filters.booking_id);
+    if (filters.event) params['event'] = filters.event;
+    if (filters.status) params['status'] = filters.status;
+    return this.http.get<NotificationPage>(`${this.apiUrl}/admin/notifications`, { headers: this.getAuthHeaders(), params });
+  }
+  getNotification(id: number): Observable<NotificationDetail> {
+    return this.http.get<NotificationDetail>(`${this.apiUrl}/admin/notifications/${id}`, { headers: this.getAuthHeaders() });
+  }
+  resendNotification(id: number, requestKey: string): Observable<{message: string; job_id: number}> {
+    return this.http.post<{message: string; job_id: number}>(`${this.apiUrl}/admin/notifications/${id}/resend`, { request_key: requestKey }, { headers: this.getAuthHeaders() });
+  }
+  retryNotification(id: number): Observable<{message: string}> {
+    return this.http.post<{message: string}>(`${this.apiUrl}/admin/notifications/${id}/retry`, {}, { headers: this.getAuthHeaders() });
+  }
+
   // --- Admin: App Settings ---
 
-  getSettings(): Observable<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }> {
-    return this.http.get<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }>(`${this.apiUrl}/admin/settings`, {
-      headers: this.getAuthHeaders()
-    });
+  getSettings(): Observable<VenueSettings> {
+    return this.http.get<VenueSettings>(`${this.apiUrl}/admin/settings`, { headers: this.getAuthHeaders() });
   }
-
-  updateSettings(data: { advance_payment_percentage?: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }): Observable<any> {
-    return this.http.put<any>(`${this.apiUrl}/admin/settings`, data, {
-      headers: this.getAuthHeaders()
-    });
+  updateSettings(data: VenueUpdate): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`${this.apiUrl}/admin/settings`, data, { headers: this.getAuthHeaders() }).pipe(tap(() => this.settingsChanges.next()));
   }
-
-  getPublicSettings(): Observable<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }> {
-    return this.http.get<{ advance_payment_percentage: number, turf_name?: string, turf_address?: string, turf_phone?: string, turf_email?: string }>(`${this.apiUrl}/settings/public`);
+  getPublicSettings(): Observable<VenueSettings> {
+    return this.http.get<VenueSettings>(`${this.apiUrl}/settings/public`);
+  }
+  uploadMedia(file: File, kind: 'logo' | 'photo' | 'share'): Observable<VenueMedia> {
+    return this.http.post<VenueMedia>(`${this.apiUrl}/admin/media?kind=${kind}`, file, { headers: this.getAuthHeaders().set('Content-Type', file.type) });
+  }
+  mediaUrl(url: string): string {
+    return this.apiUrl.startsWith('http') ? new URL(url, this.apiUrl).href : url;
   }
 
   // --- Admin: Bulk Slot Blocking ---

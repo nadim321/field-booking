@@ -18,7 +18,8 @@
     "release": "node scripts/release.js",
     "test:release": "node tests/release-smoke.js",
     "payment:reconcile": "node scripts/reconcile-payment.js",
-    "admin:create": "node scripts/create-admin.js"
+    "admin:create": "node scripts/create-admin.js",
+    "media:cleanup": "node scripts/media-cleanup.js"
   },
   "dependencies": {
     "@sentry/node": "^9.47.2",
@@ -31,6 +32,7 @@
     "nodemailer": "^9.0.1",
     "pdfkit": "^0.19.1",
     "qrcode": "^1.5.4",
+    "sharp": "^0.34.5",
     "sslcommerz-lts": "^1.2.0"
   },
   "engines": {

@@ -1,0 +1,120 @@
+<section class="panel-card advance-panel" aria-labelledby="advance-title">
+  <div class="panel-header"><h3 id="advance-title">Advance payment</h3></div>
+  <form class="panel-body" (ngSubmit)="saveAdvance()" #advanceForm="ngForm">
+    <div class="form-group"><label for="advancePct">Required advance payment (%)</label>
+      <input id="advancePct" name="advancePct" class="form-control" type="number" [(ngModel)]="advancePercentage" min="0.01" max="100" step="0.01" required [disabled]="advanceBusy || advancePercentage === null">
+      <p>Percentage of the booking price required for automatic approval.</p>
+    </div>
+    <p *ngIf="advanceBusy" role="status">Please wait…</p>
+    <p *ngIf="advanceError" role="alert">{{ advanceError }} <button type="button" class="btn btn-secondary btn-sm" (click)="loadAdvance()" [disabled]="advanceBusy">Reload settings</button></p>
+    <p *ngIf="advanceMessage" role="status">{{ advanceMessage }}</p>
+    <button class="btn btn-primary" type="submit" [disabled]="advanceBusy || advancePercentage === null || advanceForm.invalid">Save Advance Payment</button>
+  </form>
+</section>
+      <!-- ================= SLOTS SETUP TAB ================= -->
+      <section  class="tab-content fade-in">
+
+
+
+        <div class="section-actions">
+          <h3>Standard Hourly Turf Slot templates</h3>
+          <button (click)="openAddSlotModal()" class="btn btn-primary btn-sm">➕ Add Slot Config</button>
+        </div>
+
+        <div class="slots-management-grid">
+          <div *ngFor="let slot of slots" class="config-card" [class.config-blocked]="slot.is_active === 0">
+            <div class="config-card-header">
+              <span class="config-time">{{ slot.start_time }} - {{ slot.end_time }}</span>
+              <span class="config-status-badge" [class.badge-active]="slot.is_active === 1"
+                [class.badge-blocked]="slot.is_active === 0">
+                {{ slot.is_active === 1 ? 'Active' : 'Blocked' }}
+              </span>
+            </div>
+
+            <div class="config-card-body">
+              <span class="config-price">৳ {{ slot.price }} / Hr</span>
+              <span class="team-badge config-category-badge">{{ categoryLabel(slot.category) }}</span>
+            </div>
+
+            <div class="config-card-footer">
+              <!-- Toggle Active -->
+              <button (click)="toggleSlotActive(slot)" class="btn-action-text">
+                {{ slot.is_active === 1 ? '🚫 Block' : '⚡ Activate' }}
+              </button>
+
+              <!-- Edit -->
+              <button (click)="openEditSlotModal(slot)" class="btn-action-text btn-act-text-edit">
+                ✏️ Edit
+              </button>
+
+              <!-- Delete -->
+              <button (click)="deleteSlotConfig(slot.id)" class="btn-action-text btn-act-text-delete">
+                🗑️ Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+<!-- Add/Edit Slot Modal -->
+<div class="modal-backdrop" *ngIf="showSlotModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>{{ editingSlotId ? 'Edit Turf Slot Configuration' : 'Create Turf Slot Configuration' }}</h2>
+      <button class="close-btn" (click)="closeSlotModal()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <form (ngSubmit)="saveSlotConfig()">
+        <div class="form-row">
+          <div class="form-group col">
+            <label for="startTime">Start Time (24h format)</label>
+            <input type="text" id="startTime" name="startTime" [(ngModel)]="slotStartTime" class="form-control" required
+              placeholder="e.g. 18:00" />
+          </div>
+          <div class="form-group col">
+            <label for="endTime">End Time (24h format)</label>
+            <input type="text" id="endTime" name="endTime" [(ngModel)]="slotEndTime" class="form-control" required
+              placeholder="e.g. 19:00" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="slotPrice">Slot Base Price (BDT/৳)</label>
+          <input type="number" id="slotPrice" name="slotPrice" [(ngModel)]="slotPrice" class="form-control" required
+            placeholder="e.g. 1500" />
+        </div>
+
+        <div class="form-group">
+          <label for="slotCategory">Category</label>
+          <select id="slotCategory" name="slotCategory" [(ngModel)]="slotCategory" class="form-control">
+            <option [ngValue]="null">-- Uncategorized --</option>
+            <option *ngFor="let cat of slotCategories" [ngValue]="cat.id">
+              {{ cat.label }} ({{ cat.hint }})
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="slotActive">Initial Status</label>
+          <select id="slotActive" name="slotActive" [(ngModel)]="slotIsActive" class="form-control">
+            <option [value]="1">Active (Bookable)</option>
+            <option [value]="0">Blocked (Reserved/Closed)</option>
+          </select>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeSlotModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            {{ editingSlotId ? 'Save Changes' : 'Create Slot' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
+  <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
+  <span class="toast-text">{{ toastMsg }}</span>
+</div>

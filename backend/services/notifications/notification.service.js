@@ -1,44 +1,37 @@
 /**
- * Notification Service
- * ---------------------
- * This is the ONLY module that server.js / booking logic should ever call
- * for notifications. It does not know or care which SMS/email provider is
- * actually wired up underneath -- see providers/sms.provider.js and
- * providers/email.provider.js for that.
- *
- * Design notes:
- * - SMS is the primary channel, email is secondary (per the spec). Both
- *   are still attempted independently; one failing does not block the
- *   other or the booking flow itself.
- * - All sends are fire-and-forget from the caller's perspective: booking
- *   logic calls notifyX() and does not (and should not) await a failure
- *   here to roll back a booking. A failed SMS/email should never prevent
- *   a booking from being created/approved/cancelled.
- * - customer_email is optional on a booking; if absent, email is silently
- *   skipped (not treated as an error).
+ * Best-effort email and legacy notification dispatch.
+ * Booking request, approval, cancellation and reminder SMS are persisted through
+ * outbox.service in the booking transaction and processed by notification.worker.
+ * This facade skips direct SMS for those tracked lifecycle events. Email remains
+ * optional and best-effort; its failure does not roll back a committed booking.
+ * Other legacy SMS events continue to use the mock adapter.
  */
 
 const smsProvider = require('./providers/sms.provider');
 const emailProvider = require('./providers/email.provider');
 const templates = require('./templates');
-const settingsService = require('../settings.service');
+const venueService = require('../venue.service');
 
 /**
- * Sends both channels for a given template result, logging outcomes.
+ * Sends email and, for untracked events, legacy mock SMS.
  * Never throws -- failures are caught and logged so a notification
  * problem can never bubble up and break the calling request handler.
  */
 async function dispatch(booking, templateFn, triggerLabel) {
   let content;
-  let turfName = 'KICKOFF ARENA'; // Fallback
+  let turfName = 'Turf Booking';
+  let venueContact = '';
   try {
-    turfName = await settingsService.getSetting('turf_name') || 'KICKOFF ARENA';
+    const venue = await venueService.read();
+    turfName = venue.turf_name || 'Turf Booking';
+    venueContact = [venue.turf_address, venue.turf_phone, venue.turf_email].filter(Boolean).join(' | ');
   } catch (err) {
     console.warn(`[NotificationService] Failed to load turf_name for ${triggerLabel}, using fallback.`);
   }
 
   try {
     content = templateFn(booking, turfName);
+    if (venueContact) { content.emailMessage += `\n\n${venueContact}`; content.smsMessage += `\n${venueContact}`; }
   } catch (err) {
     console.error(`[NotificationService] Failed to build template for "${triggerLabel}":`, err.message);
     return;
@@ -46,8 +39,9 @@ async function dispatch(booking, templateFn, triggerLabel) {
 
   const { smsMessage, emailSubject, emailMessage } = content;
 
-  // SMS (primary channel)
-  if (booking.customer_phone) {
+  // Durable booking SMS jobs are written in the booking transaction. Email remains unchanged.
+  const tracked = ['booking_created', 'booking_approved', 'booking_cancelled', 'advance_payment_confirmed'].includes(triggerLabel);
+  if (!tracked && booking.customer_phone) {
     try {
       const result = await smsProvider.activeProvider.send({
         to: booking.customer_phone,
@@ -59,7 +53,7 @@ async function dispatch(booking, templateFn, triggerLabel) {
     } catch (err) {
       console.error(`[NotificationService] SMS threw for "${triggerLabel}":`, err.message);
     }
-  } else {
+  } else if (!tracked) {
     console.warn(`[NotificationService] No customer_phone on booking ${booking.id || booking.booking_id}, skipping SMS for "${triggerLabel}"`);
   }
 
@@ -158,15 +152,19 @@ function notifyRecurringConflict(recurringBooking, conflictDate) {
  */
 async function dispatchAdminEmail(templateFn, args, triggerLabel) {
   let content;
-  let turfName = 'KICKOFF ARENA'; // Fallback
+  let turfName = 'Turf Booking';
+  let venueContact = '';
   try {
-    turfName = await settingsService.getSetting('turf_name') || 'KICKOFF ARENA';
+    const venue = await venueService.read();
+    turfName = venue.turf_name || 'Turf Booking';
+    venueContact = [venue.turf_address, venue.turf_phone, venue.turf_email].filter(Boolean).join(' | ');
   } catch (err) {
     console.warn(`[NotificationService] Failed to load turf_name for ${triggerLabel}, using fallback.`);
   }
 
   try {
     content = templateFn(...args, turfName);
+    if (venueContact) content.emailMessage += `\n\n${venueContact}`;
   } catch (err) {
     console.error(`[NotificationService] Failed to build admin alert template for "${triggerLabel}":`, err.message);
     return;

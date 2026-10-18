@@ -8,7 +8,12 @@ import { SeasonBookingComponent } from './components/season-booking/season-booki
 export const routes: Routes = [
   { path: '', component: BookingPortalComponent },
   { path: 'admin/login', component: AdminLoginComponent },
-  { path: 'admin/dashboard', component: AdminDashboardComponent, canActivate: [adminGuard] },
+  { path: 'admin/dashboard', component: AdminDashboardComponent, canActivate: [adminGuard], children: [
+    { path: 'collections', canActivate: [adminGuard], loadComponent: () => import('./components/collections/collections.component').then(m => m.CollectionsComponent) },
+    { path: 'notifications', canActivate: [adminGuard], loadComponent: () => import('./components/notifications/notifications.component').then(m => m.NotificationsComponent) },
+    { path: 'field-configuration', canActivate: [adminGuard], loadComponent: () => import('./components/venue/venue-settings.component').then(m => m.VenueSettingsComponent) },
+    { path: 'slot-setup', canActivate: [adminGuard], loadComponent: () => import('./components/slot-setup/slot-setup.component').then(m => m.SlotSetupComponent) }
+  ] },
   { path: 'season-booking', component: SeasonBookingComponent },
   { path: '**', redirectTo: '' }   // wildcard must always be LAST
 ];

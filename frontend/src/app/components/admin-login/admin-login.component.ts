@@ -1,3 +1,5 @@
+import { BrandComponent } from '../venue/brand.component';
+import { VenueFooterComponent } from '../venue/venue-footer.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,7 +9,7 @@ import { ApiService } from '../../services/api.service';
 @Component({
   selector: 'app-admin-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [BrandComponent, VenueFooterComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './admin-login.component.html',
   styleUrl: './admin-login.component.css'
 })

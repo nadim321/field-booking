@@ -9,7 +9,7 @@ exports.result = (req, res) => {
 
   db.get(
     `SELECT b.id, b.booking_date, b.status, b.payment_status, b.amount_paid,
-            s.start_time, s.end_time, s.price, c.refund_amount, c.refunded_amount,
+            s.start_time, s.end_time, b.booking_price AS price, b.price_source, c.refund_amount, c.refunded_amount,
             EXISTS(SELECT 1 FROM payment_transactions WHERE booking_id = b.id AND status = 'valid') AS has_verified_payment,
             p.status AS attempt_status, p.terminal_verified, p.initialization_state
      FROM bookings b
@@ -34,6 +34,7 @@ exports.result = (req, res) => {
         start_time: booking.start_time,
         end_time: booking.end_time,
         price: booking.price,
+        price_source: booking.price_source,
         amount_paid: booking.amount_paid,
         balance_due: booking.status === 'cancelled' ? 0 : Math.round(balanceDue * 100) / 100,
         refund_amount: booking.refund_amount,
@@ -54,7 +55,7 @@ exports.pdf = (req, res) => {
   const { id } = req.params;
 
   db.get(
-    `SELECT b.*, s.start_time, s.end_time, s.price
+    `SELECT b.*, s.start_time, s.end_time, b.booking_price AS price, b.price_source
      FROM bookings b
      JOIN slots s ON b.slot_id = s.id
      WHERE b.id = ?`,

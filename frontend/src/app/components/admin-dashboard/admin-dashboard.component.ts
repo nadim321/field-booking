@@ -1,9 +1,14 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { PaymentDialogComponent } from '../collections/payment-dialog.component';
+import { filter } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BrandComponent } from '../venue/brand.component';
+import { Component, OnInit, DestroyRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AdminCalendarComponent } from '../admin-calendar/admin-calendar.component';
+import { AdminStats } from '../../services/admin-stats';
 
 interface BookingRecord {
   id: number;
@@ -14,7 +19,7 @@ interface BookingRecord {
   customer_email?: string;
   team_name?: string;
   status: 'pending' | 'approved' | 'cancelled';
-  payment_status: 'paid' | 'unpaid';
+  payment_status: 'paid' | 'unpaid' | 'partially_paid';
   refund_amount?: number;
   refunded_amount?: number;
   cancellation_source?: string;
@@ -23,6 +28,7 @@ interface BookingRecord {
   start_time: string;
   end_time: string;
   price: number;
+  price_source: 'captured' | 'legacy_estimate';
 }
 
 interface SlotConfig {
@@ -53,43 +59,67 @@ interface RecurringBookingRecord {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Canonical category mapping, kept in sync with backend/constants/slot-categories.js.
-// Category is always assigned manually by the admin -- never auto-derived
-// from start_time. These hour ranges are only the business's general
-// intent for each label, shown here as a guide in the dropdown.
-const SLOT_CATEGORIES: { id: number; label: string; hint: string }[] = [
-  { id: 1, label: 'Morning', hint: '6:00 AM - 12:00 PM' },
-  { id: 2, label: 'Afternoon', hint: '12:00 PM - 4:00 PM' },
-  { id: 3, label: 'Evening', hint: '4:00 PM - 7:00 PM' },
-  { id: 4, label: 'Night', hint: '7:00 PM - 12:00 AM' },
-  { id: 5, label: 'Midnight', hint: '12:00 AM - 6:00 AM' }
-];
-const CATEGORY_LABEL_BY_ID: Record<number, string> = SLOT_CATEGORIES.reduce(
-  (acc, c) => ({ ...acc, [c.id]: c.label }),
-  {} as Record<number, string>
-);
-
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AdminCalendarComponent],
+  imports: [PaymentDialogComponent, BrandComponent, CommonModule, FormsModule, RouterLink, RouterOutlet, AdminCalendarComponent],
   templateUrl: './admin-dashboard.component.html',
   styleUrl: './admin-dashboard.component.css'
 })
 export class AdminDashboardComponent implements OnInit {
   private apiService = inject(ApiService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
 
   // Tabs navigation
-  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'blocking' = 'calendar';
+  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'field' | 'notifications' | 'collections' | 'blocking' = 'calendar';
+
+  get pageTitle(): string {
+    return this.activeTab === 'collections' ? 'Collections' : this.activeTab === 'notifications' ? 'Notifications' : this.activeTab === 'field' ? 'Field Configuration' : this.activeTab === 'slots' ? 'Slot Setup' : 'Admin Control Panel';
+  }
+  get pageDescription(): string {
+    return this.activeTab === 'collections' ? 'Record receipts, review corrections and reconcile daily collections.' : this.activeTab === 'notifications' ? 'Track mock SMS notifications, reminders and retry attempts.' : this.activeTab === 'field' ? 'Manage your venue branding, photos, facilities and contact information.' : this.activeTab === 'slots' ? 'Manage slot times, prices, availability and advance payments.' : 'Manage bookings, configure turf slots, and analyze revenue.';
+  }
+  navigateTab(tab: 'calendar' | 'overview' | 'bookings' | 'season' | 'blocking'): void {
+    this.router.navigate(['/admin/dashboard'], { queryParams: tab === 'calendar' ? {} : { tab } });
+  }
+  private syncPage(): void {
+    const child = this.route.firstChild?.snapshot.routeConfig?.path;
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    this.activeTab = child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(tab || '') ? tab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
+    if (this.activeTab === 'blocking') { this.loadSlots(); this.selectedSlotIdsForBlock.clear(); this.loadBlockPreview(); }
+  }
+
+  paymentBookingId:number|null=null;
+  collectionChanged():void {this.loadBookings();this.loadStats();}
 
   // Stats Data
-  stats: any = null;
+  stats: AdminStats | null = null;
+  readonly financialMetrics = [
+    { key: 'received_amount', label: 'Received amount (all bookings)' },
+    { key: 'approved_outstanding', label: 'Outstanding — approved bookings' },
+    { key: 'pending_outstanding', label: 'Outstanding — pending requests' },
+    { key: 'refunded_amount', label: 'Refunded amount (completed)' },
+    { key: 'refund_outstanding', label: 'Refund outstanding' },
+    { key: 'net_received', label: 'Net received (after refunds)' }
+  ] as const;
 
   // Bookings Data
   bookings: BookingRecord[] = [];
   filteredBookings: BookingRecord[] = [];
   bookingFilter: 'all' | 'pending' | 'approved' | 'cancelled' = 'all';
+  bookingSearch = '';
+  bookingDateFrom = '';
+  bookingDateTo = '';
+  bookingPaymentFilter: '' | 'unpaid' | 'partially_paid' | 'paid' = '';
+  bookingsPage = 1;
+  readonly bookingsPageSize = 25;
+  bookingsTotal = 0;
+  bookingsLoading = false;
+  bookingsExporting = false;
+  private bookingsRequest = 0;
+  get bookingsPageCount(): number { return Math.max(1, Math.ceil(this.bookingsTotal / this.bookingsPageSize)); }
 
   // Season / Recurring Bookings Data
   recurringBookings: RecurringBookingRecord[] = [];
@@ -97,27 +127,8 @@ export class AdminDashboardComponent implements OnInit {
   recurringFilter: 'all' | 'pending_approval' | 'active' | 'paused' | 'cancelled' | 'expired' = 'pending_approval';
   recurringLoading = false;
 
-  // Slots Configuration Data
+  // Slot list for bulk blocking; editing lives on the Slot Setup page.
   slots: SlotConfig[] = [];
-  slotCategoryFilter: number | 'all' = 'all'; // for the Slot Setup tab filter
-  readonly slotCategories = SLOT_CATEGORIES; // exposed for the template dropdown
-
-  // Create/Edit Slot Modal state
-  showSlotModal = false;
-  editingSlotId: number | null = null; // null if creating
-  slotStartTime = '';
-  slotEndTime = '';
-  slotPrice = 1000;
-  slotIsActive = 1;
-  slotCategory: number | null = null; // null = "Uncategorized", admin always picks manually
-
-  // Payment and Turf settings
-  advancePaymentPercentage: number = 25;
-  turfName: string = '';
-  turfAddress: string = '';
-  turfPhone: string = '';
-  turfEmail: string = '';
-  settingsLoading = false;
 
   // --- Bulk Slot Blocking ---
   // Date range and reason for the block action
@@ -154,17 +165,20 @@ export class AdminDashboardComponent implements OnInit {
       this.router.navigate(['/admin/login']);
       return;
     }
+    this.syncPage();
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.syncPage());
     this.loadStats();
     this.loadBookings();
     this.loadSlots();
     this.loadRecurringBookings();
-    this.loadSettings();
+
     // Set default blocking dates to today + 7 days
     const todayStr = new Date().toISOString().split('T')[0];
     this.blockStartDate = todayStr;
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 6);
     this.blockEndDate = nextWeek.toISOString().split('T')[0];
+    if (this.activeTab === 'blocking') this.loadBlockPreview();
   }
 
   // --- API Load Operations ---
@@ -180,14 +194,57 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   loadBookings(): void {
-    this.apiService.getAdminBookings().subscribe({
+    const request = ++this.bookingsRequest;
+    this.bookingsLoading = true;
+    this.apiService.getAdminBookings(this.bookingQuery()).subscribe({
       next: (res) => {
-        this.bookings = res;
-        this.applyBookingFilter();
+        if (request !== this.bookingsRequest) return;
+        const lastPage = Math.max(1, Math.ceil(res.total / this.bookingsPageSize));
+        if (this.bookingsPage > lastPage) { this.bookingsPage = lastPage; this.loadBookings(); return; }
+        this.bookings = res.items;
+        this.filteredBookings = res.items;
+        this.bookingsTotal = res.total;
+        this.bookingsPage = res.page;
+        this.bookingsLoading = false;
       },
       error: (err) => {
+        if (request !== this.bookingsRequest) return;
+        this.bookingsLoading = false;
         this.handleError(err);
       }
+    });
+  }
+
+  private bookingQuery() {
+    return { q: this.bookingSearch.trim(), date_from: this.bookingDateFrom, date_to: this.bookingDateTo,
+      status: this.bookingFilter === 'all' ? '' : this.bookingFilter, payment_status: this.bookingPaymentFilter,
+      page: this.bookingsPage, page_size: this.bookingsPageSize };
+  }
+
+  searchBookings(): void { this.bookingsPage = 1; this.loadBookings(); }
+
+  clearBookingFilters(): void {
+    this.bookingSearch = ''; this.bookingDateFrom = ''; this.bookingDateTo = '';
+    this.bookingPaymentFilter = ''; this.bookingFilter = 'all'; this.bookingsPage = 1; this.loadBookings();
+  }
+
+  changeBookingsPage(delta: number): void {
+    const page = this.bookingsPage + delta;
+    if (page < 1 || page > this.bookingsPageCount || this.bookingsLoading) return;
+    this.bookingsPage = page; this.loadBookings();
+  }
+
+  exportBookings(): void {
+    this.bookingsExporting = true;
+    const filters = this.bookingQuery();
+    const { page, page_size, ...allMatches } = filters;
+    this.apiService.exportAdminBookings(allMatches).subscribe({
+      next: blob => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a'); link.href = url; link.download = 'bookings.csv'; link.click(); URL.revokeObjectURL(url);
+        this.bookingsExporting = false;
+      },
+      error: err => { this.bookingsExporting = false; this.handleError(err); }
     });
   }
 
@@ -198,49 +255,6 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: (err) => {
         this.handleError(err);
-      }
-    });
-  }
-
-  // --- Payment Settings ---
-  loadSettings(): void {
-    this.apiService.getSettings().subscribe({
-      next: (res) => {
-        this.advancePaymentPercentage = res.advance_payment_percentage;
-        this.turfName = res.turf_name || '';
-        this.turfAddress = res.turf_address || '';
-        this.turfPhone = res.turf_phone || '';
-        this.turfEmail = res.turf_email || '';
-      },
-      error: (err) => {
-        this.handleError(err);
-      }
-    });
-  }
-
-  saveSettings(): void {
-    if (this.advancePaymentPercentage <= 0 || this.advancePaymentPercentage > 100) {
-      this.showToast('Percentage must be between 1 and 100', 'error');
-      return;
-    }
-    this.settingsLoading = true;
-    
-    const settingsPayload = {
-      advance_payment_percentage: this.advancePaymentPercentage,
-      turf_name: this.turfName,
-      turf_address: this.turfAddress,
-      turf_phone: this.turfPhone,
-      turf_email: this.turfEmail
-    };
-
-    this.apiService.updateSettings(settingsPayload).subscribe({
-      next: () => {
-        this.settingsLoading = false;
-        this.showToast('Settings updated successfully', 'success');
-      },
-      error: (err) => {
-        this.settingsLoading = false;
-        this.showToast(err.error?.message || 'Failed to update settings', 'error');
       }
     });
   }
@@ -330,15 +344,8 @@ export class AdminDashboardComponent implements OnInit {
 
   setBookingFilter(filter: 'all' | 'pending' | 'approved' | 'cancelled'): void {
     this.bookingFilter = filter;
-    this.applyBookingFilter();
-  }
-
-  applyBookingFilter(): void {
-    if (this.bookingFilter === 'all') {
-      this.filteredBookings = this.bookings;
-    } else {
-      this.filteredBookings = this.bookings.filter(b => b.status === this.bookingFilter);
-    }
+    this.bookingsPage = 1;
+    this.loadBookings();
   }
 
   // --- Season / Recurring Booking Operations ---
@@ -544,118 +551,6 @@ export class AdminDashboardComponent implements OnInit {
       map[b.block_date].push(b);
     });
     return Object.keys(map).sort().map(date => ({ date, slots: map[date] }));
-  }
-
-  // --- Slot Template Operations ---
-  openAddSlotModal(): void {
-    this.editingSlotId = null;
-    this.slotStartTime = '';
-    this.slotEndTime = '';
-    this.slotPrice = 1000;
-    this.slotIsActive = 1;
-    this.slotCategory = null; // blank by default -- admin always picks manually
-    this.showSlotModal = true;
-  }
-
-  openEditSlotModal(slot: SlotConfig): void {
-    this.editingSlotId = slot.id;
-    this.slotStartTime = slot.start_time;
-    this.slotEndTime = slot.end_time;
-    this.slotPrice = slot.price;
-    this.slotIsActive = slot.is_active;
-    this.slotCategory = slot.category;
-    this.showSlotModal = true;
-  }
-
-  closeSlotModal(): void {
-    this.showSlotModal = false;
-  }
-
-  categoryLabel(category: number | null | undefined): string {
-    if (category === null || category === undefined) return 'Uncategorized';
-    return CATEGORY_LABEL_BY_ID[category] || 'Uncategorized';
-  }
-
-  saveSlotConfig(): void {
-    if (!this.slotStartTime || !this.slotEndTime || this.slotPrice === undefined) {
-      this.showToast('All fields are required', 'error');
-      return;
-    }
-
-    const slotData: any = {
-      start_time: this.slotStartTime,
-      end_time: this.slotEndTime,
-      price: this.slotPrice,
-      is_active: this.slotIsActive
-    };
-
-    // category is only sent when explicitly set; if the admin cleared it
-    // back to "Uncategorized" on an edit, tell the backend to actually
-    // clear it (plain `category: null` would be ignored by the backend's
-    // COALESCE-based update -- see server.js for why).
-    if (this.slotCategory !== null) {
-      slotData.category = this.slotCategory;
-    } else if (this.editingSlotId !== null) {
-      slotData.category_clear = true;
-    }
-
-    this.loading = true;
-    if (this.editingSlotId !== null) {
-      this.apiService.updateSlot(this.editingSlotId, slotData).subscribe({
-        next: () => {
-          this.loading = false;
-          this.showToast('Slot configuration updated', 'success');
-          this.closeSlotModal();
-          this.loadSlots();
-        },
-        error: (err) => {
-          this.loading = false;
-          this.showToast(err.error?.message || 'Failed to update slot', 'error');
-        }
-      });
-    } else {
-      this.apiService.createSlot(slotData).subscribe({
-        next: () => {
-          this.loading = false;
-          this.showToast('Slot configuration added', 'success');
-          this.closeSlotModal();
-          this.loadSlots();
-        },
-        error: (err) => {
-          this.loading = false;
-          this.showToast(err.error?.message || 'Failed to create slot', 'error');
-        }
-      });
-    }
-  }
-
-  toggleSlotActive(slot: SlotConfig): void {
-    const updatedStatus = slot.is_active === 1 ? 0 : 1;
-    this.apiService.updateSlot(slot.id, { is_active: updatedStatus }).subscribe({
-      next: () => {
-        this.showToast(`Slot is now ${updatedStatus === 1 ? 'Active' : 'Blocked'}`, 'success');
-        this.loadSlots();
-      },
-      error: (err) => {
-        this.showToast('Failed to update status', 'error');
-      }
-    });
-  }
-
-  deleteSlotConfig(id: number): void {
-    if (!confirm('Are you sure you want to delete this slot template? Existing slot bookings for this hour might be orphaned.')) return;
-    this.loading = true;
-    this.apiService.deleteSlot(id).subscribe({
-      next: () => {
-        this.loading = false;
-        this.showToast('Slot template deleted', 'success');
-        this.loadSlots();
-      },
-      error: (err) => {
-        this.loading = false;
-        this.showToast(err.error?.message || 'Failed to delete slot configuration', 'error');
-      }
-    });
   }
 
   // --- Helpers ---

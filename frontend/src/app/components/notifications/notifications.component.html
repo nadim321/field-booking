@@ -1,0 +1,32 @@
+<div class="mock-banner" role="note"><strong>Mock SMS mode</strong><p>No real SMS is sent. “Simulated” means the mock provider completed the attempt; it does not mean the customer received a message. Email delivery is not tracked here.</p></div>
+<form class="filters" (ngSubmit)="applyFilters()">
+  <div class="filter-field"><label for="notification-booking-id">Booking ID</label><input id="notification-booking-id" type="number" name="bookingId" [(ngModel)]="bookingId" min="1" step="1"></div>
+  <div class="filter-field"><label for="notification-event">Event</label><select id="notification-event" name="event" [(ngModel)]="event"><option value="">All events</option><option *ngFor="let item of events" [value]="item">{{labels[item]}}</option></select></div>
+  <div class="filter-field"><label for="notification-status">Status</label><select id="notification-status" name="status" [(ngModel)]="status"><option value="">All statuses</option><option *ngFor="let item of statuses" [value]="item">{{labels[item]}}</option></select></div>
+  <button type="submit">Apply filters</button><button type="button" (click)="load()" [disabled]="loading">Refresh notifications</button>
+</form>
+<p class="notice" *ngIf="notice" role="status">{{notice}}</p>
+<p class="error" *ngIf="error" role="alert">{{error}}</p>
+<p *ngIf="loading" role="status">Loading notifications…</p>
+<p class="hint">Times shown in Asia/Dhaka. Statuses refresh every 30 seconds while this page is visible.</p>
+<ng-container *ngIf="data as result">
+  <div class="table-wrap"><table><thead><tr><th>Booking / event</th><th>Recipient</th><th>Scheduled</th><th>Status</th><th>Attempts</th><th>Last update</th><th>Actions</th></tr></thead>
+  <tbody><tr *ngFor="let job of result.items" [attr.data-testid]="'notification-'+job.id">
+    <td><strong>#{{job.booking_id}}</strong><br>{{labels[job.event]}}<small *ngIf="job.source_job_id">Manual send · Original #{{job.source_job_id}}</small></td><td>{{job.recipient}}</td><td>{{job.scheduled_at | date:'dd MMM yyyy, h:mm a':'+0600'}}</td>
+    <td><span class="status" [attr.data-status]="job.status">{{labels[job.status]}}</span><small *ngIf="job.last_error">{{reasons[job.last_error] || 'Attempt requires review'}}</small><small *ngIf="job.status==='retrying'">Next attempt: {{job.next_attempt_at | date:'dd MMM, h:mm a':'+0600'}}</small></td>
+    <td>{{job.attempts}}</td><td>{{job.updated_at | date:'dd MMM, h:mm a':'+0600'}}</td>
+    <td><button (click)="open(job.id)" [attr.aria-label]="'Details for notification '+job.id">Details</button><button *ngIf="job.can_resend" (click)="resend(job.id)" [disabled]="retrying" [attr.aria-label]="(job.status==='simulated'?'Resend notification ':'Send notification ')+job.id">{{job.status==='simulated'?'Resend':'Send now'}}</button></td>
+  </tr><tr *ngIf="!result.items.length"><td colspan="7">No notifications match these filters.</td></tr></tbody></table></div>
+  <nav class="pagination" aria-label="Notification pages"><button (click)="move(-1)" [disabled]="page<=1 || loading">Previous</button><span>Page {{page}} · {{result.total}} notifications</span><button (click)="move(1)" [disabled]="page*result.page_size>=result.total || loading">Next</button></nav>
+</ng-container>
+<p *ngIf="detailLoading" role="status">Loading details…</p><p *ngIf="detailError" role="alert" class="error">{{detailError}}</p>
+<section *ngIf="detail as job" class="details" aria-labelledby="notification-detail-title">
+  <div class="detail-title"><h2 id="notification-detail-title">Notification #{{job.id}} · Booking #{{job.booking_id}}</h2><button (click)="close()">Close details</button></div>
+  <p>{{labels[job.event]}} · {{labels[job.status]}} · {{job.recipient}}</p>
+  <p *ngIf="job.resend_unavailable_reason">{{reasons[job.resend_unavailable_reason] || job.resend_unavailable_reason}}</p>
+  <p *ngIf="job.event==='reminder' && !job.source_job_id">Sending a future reminder now keeps its automatic schedule.</p>
+  <h3>Message preview</h3><pre>{{job.message}}</pre>
+  <button *ngIf="job.can_resend" (click)="resend(job.id)" [disabled]="retrying">{{job.status==='simulated'?'Resend this notification':'Send this notification now'}}</button>
+  <h3>Attempt history</h3><p *ngIf="!job.history.length">No attempts yet.</p>
+  <ol><li *ngFor="let attempt of job.history"><strong>{{labels[attempt.outcome] || attempt.outcome}}</strong> · {{attempt.started_at | date:'dd MMM yyyy, h:mm:ss a':'+0600'}}<span *ngIf="attempt.outcome!=='manual_retry' && attempt.outcome!=='manual_send'"> · Attempt {{attempt.attempt_number}}</span><span *ngIf="attempt.actor_id"> · Admin #{{attempt.actor_id}}</span><p *ngIf="attempt.error_code">{{reasons[attempt.error_code] || 'Attempt requires review'}}</p><details *ngIf="attempt.message"><summary>Attempt message</summary><pre>{{attempt.message}}</pre></details></li></ol>
+</section>

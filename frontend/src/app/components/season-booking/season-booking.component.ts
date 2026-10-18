@@ -1,8 +1,13 @@
+import { BrandComponent } from '../venue/brand.component';
+import { VenueFooterComponent } from '../venue/venue-footer.component';
+import { CustomerFaqComponent } from '../venue/customer-faq.component';
+import { BrandingService } from '../../services/branding.service';
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { dhakaToday } from '../../services/calendar';
 
 interface SlotOption {
   id: number;
@@ -15,12 +20,22 @@ interface SlotOption {
 @Component({
   selector: 'app-season-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [BrandComponent, VenueFooterComponent, CustomerFaqComponent, CommonModule, FormsModule, RouterLink],
   templateUrl: './season-booking.component.html',
   styleUrl: './season-booking.component.css'
 })
 export class SeasonBookingComponent implements OnInit {
   private apiService = inject(ApiService);
+  private branding = inject(BrandingService);
+  language: 'en' | 'bn' = 'en';
+  private slotRequest = 0;
+
+  t(en: string, bn: string): string { return this.language === 'bn' ? bn : en; }
+  toggleLanguage(): void {
+    this.language = this.language === 'en' ? 'bn' : 'en';
+    try { localStorage.setItem('booking-language', this.language); } catch { /* Storage may be unavailable. */ }
+    this.branding.setCustomerPage('season', this.language);
+  }
 
   // Self-serve cap, mirrored client-side from the backend's
   // MAX_RECURRING_RANGE_MONTHS so the date picker can't even let the user
@@ -54,18 +69,15 @@ export class SeasonBookingComponent implements OnInit {
   toastType: 'success' | 'error' | '' = '';
 
   ngOnInit(): void {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    this.todayDate = `${yyyy}-${mm}-${dd}`;
+    try { this.language = localStorage.getItem('booking-language') === 'bn' ? 'bn' : 'en'; } catch { /* Use English. */ }
+    this.todayDate = dhakaToday();
+    this.branding.setCustomerPage('season', this.language);
   }
 
   get selectedDayName(): string {
     if (!this.startDate) return '';
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const d = new Date(this.startDate + 'T00:00:00');
-    return dayNames[d.getDay()];
+    const locale = this.language === 'bn' ? 'bn-BD' : 'en-US';
+    return new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${this.startDate}T00:00:00Z`));
   }
 
   /** Called when the user picks/changes the start date. */
@@ -75,15 +87,17 @@ export class SeasonBookingComponent implements OnInit {
     this.slotOptions = [];
 
     if (!this.startDate) {
+      this.slotRequest++;
+      this.loadingSlots = false;
       this.maxEndDate = '';
       this.endDate = '';
       return;
     }
 
     // Recompute the max allowed end date client-side (mirrors backend cap).
-    const start = new Date(this.startDate + 'T00:00:00');
-    const max = new Date(start);
-    max.setMonth(max.getMonth() + this.MAX_RANGE_MONTHS);
+    const [year, month, day] = this.startDate.split('-').map(Number);
+    const max = new Date(Date.UTC(year, month - 1, day));
+    max.setUTCMonth(max.getUTCMonth() + this.MAX_RANGE_MONTHS);
     this.maxEndDate = max.toISOString().split('T')[0];
 
     // If a previously chosen end date is now out of range, clear it.
@@ -104,14 +118,18 @@ export class SeasonBookingComponent implements OnInit {
    */
   loadSlotsForDate(): void {
     if (!this.startDate) return;
+    const requestDate = this.startDate;
+    const request = ++this.slotRequest;
     this.loadingSlots = true;
-    this.apiService.getAvailableSlots(this.startDate).subscribe({
+    this.apiService.getAvailableSlots(requestDate).subscribe({
       next: (res) => {
+        if (request !== this.slotRequest || requestDate !== this.startDate) return;
         this.slotOptions = (res.slots || []).filter((s: any) => s.is_active !== 0);
         this.loadingSlots = false;
       },
       error: () => {
-        this.errorMsg = 'Failed to load available slot times. Please try again.';
+        if (request !== this.slotRequest || requestDate !== this.startDate) return;
+        this.errorMsg = this.t('Failed to load available slot times. Please try again.', 'খালি স্লট লোড হয়নি। আবার চেষ্টা করুন।');
         this.loadingSlots = false;
       }
     });
@@ -142,17 +160,17 @@ export class SeasonBookingComponent implements OnInit {
     this.errorMsg = '';
 
     if (!this.startDate || !this.endDate || !this.selectedSlotId || !this.customerName || !this.customerPhone) {
-      this.errorMsg = 'Please fill in all required fields.';
+      this.errorMsg = this.t('Please fill in all required fields.', 'প্রয়োজনীয় সব তথ্য পূরণ করুন।');
       return;
     }
 
     if (this.endDate <= this.startDate) {
-      this.errorMsg = 'End date must be after start date.';
+      this.errorMsg = this.t('End date must be after start date.', 'শেষ তারিখ শুরুর তারিখের পরে হতে হবে।');
       return;
     }
 
     if (this.endDate > this.maxEndDate) {
-      this.errorMsg = `Season bookings can run for a maximum of ${this.MAX_RANGE_MONTHS} months.`;
+      this.errorMsg = this.t(`Season bookings can run for a maximum of ${this.MAX_RANGE_MONTHS} months.`, `সিজন বুকিং সর্বোচ্চ ${this.MAX_RANGE_MONTHS} মাসের জন্য করা যাবে।`);
       return;
     }
 
@@ -169,11 +187,16 @@ export class SeasonBookingComponent implements OnInit {
       next: () => {
         this.submitting = false;
         this.submitted = true;
-        this.showToast('Season booking request submitted! Awaiting admin approval.', 'success');
+        this.showToast(this.t('Season booking request submitted! Awaiting venue approval.', 'সিজন বুকিং অনুরোধ পাঠানো হয়েছে। মাঠ কর্তৃপক্ষের অনুমোদনের অপেক্ষায় আছে।'), 'success');
       },
       error: (err) => {
         this.submitting = false;
-        this.errorMsg = err.error?.message || 'Failed to submit season booking request.';
+        const serverMessage = err.error?.message || '';
+        this.errorMsg = serverMessage.startsWith('Season booking range cannot exceed')
+          ? this.t(serverMessage, `সিজন বুকিং সর্বোচ্চ ${this.MAX_RANGE_MONTHS} মাসের জন্য করা যাবে।`)
+          : serverMessage === 'Selected slot is not active or does not exist'
+            ? this.t('The selected slot is no longer available. Choose another time.', 'নির্বাচিত স্লটটি আর পাওয়া যাচ্ছে না। অন্য সময় বেছে নিন।')
+            : (this.language === 'bn' ? (serverMessage ? 'অনুরোধ পাঠানো যায়নি। তথ্য যাচাই করে আবার চেষ্টা করুন।' : 'সিজন বুকিং অনুরোধ পাঠানো যায়নি। আবার চেষ্টা করুন।') : serverMessage || 'Failed to submit season booking request.');
         this.showToast(this.errorMsg, 'error');
       }
     });
@@ -191,6 +214,7 @@ export class SeasonBookingComponent implements OnInit {
     this.customerEmail = '';
     this.teamName = '';
     this.errorMsg = '';
+    this.branding.setCustomerPage('season', this.language);
   }
 
   showToast(message: string, type: 'success' | 'error'): void {

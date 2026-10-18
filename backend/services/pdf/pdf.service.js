@@ -1,5 +1,4 @@
 const PDFDocument = require('pdfkit');
-const settingsService = require('../settings.service');
 
 const PRIMARY = '#10b981';
 const TEXT = '#1e293b';
@@ -81,21 +80,19 @@ function row(doc, label, value, color = TEXT) {
 
 async function drawHeader(doc) {
 
-   const turfName =
-      await settingsService.getSetting('turf_name') ||
-      'KICKOFF ARENA';
-
-   const turfAddress =
-      await settingsService.getSetting('turf_address') ||
-      '';
-
-   const turfPhone =
-      await settingsService.getSetting('turf_phone') ||
-      '';
-
-   const turfEmail =
-      await settingsService.getSetting('turf_email') ||
-      '';
+   const venue = await require('../venue.service').read();
+   const turfName = venue.turf_name || 'Turf Booking';
+   const turfAddress = venue.turf_address;
+   const turfPhone = venue.turf_phone;
+   const turfEmail = venue.turf_email;
+   if (venue.turf_logo) {
+      const logoPath = require('../media.service').filePath(`${venue.turf_logo.id}.png`);
+      try {
+         const image = await require('node:fs/promises').readFile(logoPath);
+         doc.image(image, (doc.page.width - 40) / 2, doc.y, { fit: [40, 40] });
+         doc.y += 44;
+      } catch { /* A missing logo must not prevent downloading a booking slip. */ }
+   }
 
    doc.rect(0, 0, doc.page.width, 8)
       .fill(PRIMARY);
@@ -113,7 +110,7 @@ async function drawHeader(doc) {
       .fontSize(8)
       .font('Helvetica')
       .text(
-         'Premium Football Turf Booking Slip',
+         'Football Turf Booking Slip',
          {
             align: 'center'
          }
@@ -289,13 +286,17 @@ async function generateBookingSlipPDF(booking) {
 
          const total = Number(booking.price || 0);
          const paid = Number(booking.amount_paid || 0);
-         const due = Math.max(0, total - paid);
+         const due = booking.status === 'cancelled' ? 0 : Math.max(0, total - paid);
 
          row(
             doc,
             'Total Charge',
             money(total)
          );
+
+         if (booking.price_source === 'legacy_estimate') {
+            row(doc, 'Price source', 'Legacy estimate (migration-time rate)');
+         }
 
          row(
             doc,
@@ -423,5 +424,4 @@ async function generateBookingSlipPDF(booking) {
 module.exports = {
    generateBookingSlipPDF
 };
-
 

@@ -5,6 +5,7 @@ export interface BookingResult {
   start_time: string;
   end_time: string;
   price: number;
+  price_source?: 'captured' | 'legacy_estimate';
   amount_paid: number;
   balance_due: number;
   refund_amount?: number;

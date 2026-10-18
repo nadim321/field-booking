@@ -149,6 +149,12 @@
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 
+.date-shortcuts { display: flex; flex-wrap: wrap; gap: .5rem; }
+.date-shortcuts .btn { padding: .45rem .8rem; font-size: .85rem; }
+.date-shortcuts .btn.selected { border-color: #34d399; color: #6ee7b7; }
+.available-filter { display: flex; align-items: center; gap: .55rem; color: #d1fae5; cursor: pointer; font-weight: 650; }
+.available-filter input { width: 18px; height: 18px; accent-color: #10b981; }
+
 .legend {
   display: flex;
   gap: 1.5rem;

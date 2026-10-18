@@ -1,28 +1,13 @@
 /**
- * SMS Provider
- * ------------
- * Defines a common interface so the rest of the app never cares which SMS
- * gateway is actually in use. To switch providers, change which class is
- * exported at the bottom of this file -- nothing else in the codebase
- * needs to change.
- *
- * Interface contract: every provider must expose
- *   async send({ to, message }) -> { success: boolean, providerResponse?: any, error?: string }
- */
-
-/**
- * MockSmsProvider
- * ----------------
- * Default provider while no real SMS gateway is purchased yet.
- * Just logs what *would* be sent, and always reports success so the rest
- * of the booking flow can be developed/tested end-to-end.
+ * SMS adapters. The durable booking worker is pinned to MockSmsProvider.
+ * A future real integration requires idempotency and delivery-receipt handling;
+ * changing activeProvider alone does not enable real booking SMS.
+ * send({ to, message }) returns { success, providerResponse?, error? }.
+ * The mock performs no network calls and does not log personal information.
  */
 class MockSmsProvider {
   async send({ to, message }) {
-    console.log('--- [MOCK SMS] ---');
-    console.log(`To: ${to}`);
-    console.log(`Message: ${message}`);
-    console.log('------------------');
+    // Simulation only. Never log recipients or message bodies.
     return { success: true, providerResponse: { mock: true } };
   }
 }
@@ -35,13 +20,8 @@ class MockSmsProvider {
  * follow a similar pattern: an HTTP GET/POST with api_key, sender_id (a
  * pre-approved masking name), recipient number, and message text.
  *
- * This class is NOT wired in or active. It exists so that once you buy a
- * real SMS API key, you only need to:
- *   1. Fill in API_URL / API_KEY / SENDER_ID below (or read from .env)
- *   2. Adjust the request shape to match your chosen provider's docs
- *   3. Swap the export at the bottom of this file
- *
- * Nothing in notification.service.js or server.js needs to change.
+ * This stub is inactive. Implement and review gateway-specific delivery and
+ * idempotency handling before enabling a real provider in any caller.
  */
 class BulkSmsBdProvider {
   constructor() {
@@ -82,7 +62,6 @@ class BulkSmsBdProvider {
 module.exports = {
   MockSmsProvider,
   BulkSmsBdProvider,
-  // Active provider. Swap to `new BulkSmsBdProvider()` once real
-  // credentials exist in .env.
+  // Legacy, non-outbox notifications also remain simulated.
   activeProvider: new MockSmsProvider()
 };

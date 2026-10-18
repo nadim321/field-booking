@@ -5,6 +5,7 @@ const db = require('./database');
 const { createApp } = require('./app');
 const scheduler = require('./services/recurring/recurring-booking.scheduler');
 const logger = require('./utils/logger');
+const notificationWorker = require('./services/notifications/notification.worker');
 
 async function start() {
   sentry.initialize();
@@ -13,16 +14,18 @@ async function start() {
   const server = createApp().listen(config.port, () => {
     logger.info('server_started', { port: config.port });
     if (process.env.SCHEDULER_ENABLED !== 'false') scheduler.start();
+    if (process.env.NOTIFICATION_WORKER_ENABLED !== 'false') notificationWorker.start();
   });
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
     scheduler.stop();
+    const notificationStop = notificationWorker.stop();
     const timeout = setTimeout(() => process.exit(1), 10000);
     timeout.unref();
     server.close(async () => {
-      try { await db.close(); await sentry.flush(); clearTimeout(timeout); }
+      try { await notificationStop; await db.close(); await sentry.flush(); clearTimeout(timeout); }
       catch { process.exitCode = 1; }
     });
   };

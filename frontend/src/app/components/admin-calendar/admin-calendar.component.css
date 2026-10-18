@@ -75,6 +75,8 @@ button:not(.slot-cell), input {
 }
 
 button:not(.slot-cell):hover:not(:disabled) { background: var(--accent-soft); }
+button.payment-action { background: #0e7490; border-color: #22d3ee; color: #ecfeff; font-weight: 650; }
+button.payment-action:hover:not(:disabled) { background: #0891b2; color: #ecfeff; }
 button:not(.slot-cell):disabled { background: var(--surface-header); color: var(--text-muted); }
 
 .view-switch {

@@ -59,3 +59,43 @@ Production builds disable build-time remote font inlining; runtime font styling 
 Customer OTP verification and automatic gateway refund transfers remain unimplemented. Existing public result/PDF/payment endpoints should receive a separate customer-authorization review before exposing additional personal data.
 
 The booking result view derives payment messages from a server summary of verified transactions, not redirect query parameters. It distinguishes staff approval from online payment, polls boundedly for delayed callbacks, and restores the last booking ID on a same-tab refresh. Dialogs trap focus, restore it on close, and protect an in-progress submission/navigation from accidental dismissal. Migration 003 introduces attempt metadata; staff use `npm run payment:reconcile -- --transaction ID` for uncertain attempts. See the deployment guide for response states and recovery.
+## Booking price snapshots
+
+Confirmation and each recurring occurrence persist the server-side rate in `bookings.booking_price`. Slot edits never reprice an existing booking. All booking financial consumers use this snapshot; availability continues to use the template rate. Migration 004 labels backfilled prices as legacy estimates. The stats service reads received amounts, balances and completed refund settlements in a consistent transaction. See [financial definitions and rollout](docs/BOOKING_PRICES.md).
+
+## Venue branding and media
+
+`venue.service` validates and atomically saves settings, exposes a public allowlist, and resolves image IDs. `media.service` decodes/re-encodes admin uploads into persistent MEDIA_DIR; a shared database lock serializes setting references with media removal. Angular's BrandingService supplies reusable header, footer and venue components; PDF and notification services read the same venue settings. Migration 005 adds media metadata and extended settings storage. See [venue branding, persistence and backup/restore](docs/VENUE_BRANDING.md).
+
+## Admin configuration pages
+
+The dashboard shares its sidebar and header with two lazy-loaded, admin-guarded child routes: `/admin/dashboard/field-configuration` renders the venue branding editor; `/admin/dashboard/slot-setup` renders a standalone slot editor with its own modal/state and advance-payment form. Field saves explicitly allowlist branding fields; advance saves send only `advance_payment_percentage` to the existing settings API. This separation requires no API or schema changes.
+
+### Booking search and export
+
+The admin bookings endpoint applies phone/team/booking-ID search, booking-date and booking/payment-status filters in MySQL, and returns a bounded page plus a total count. `admin-list.service.js` shares filter validation and predicates between the paginated list and a streamed CSV export, so export includes every matching row rather than only the visible page. Migration 009 adds filter/order indexes. Both endpoints require admin authentication.
+
+`/admin/dashboard` defaults to Booking Calendar. Other existing dashboard views use `?tab=overview`, `bookings`, `season` or `blocking`; navigation state follows the router for reload and Back/Forward support. The active child route takes precedence over query parameters. Returning to Bulk Blocking reloads slot data so edits made on Slot Setup are reflected there.
+
+### Durable mock booking SMS
+
+Booking mutations write notification jobs through
+`services/notifications/outbox.service.js` in the same transaction. The
+`notification.worker.js` worker claims database leases, simulates attempts and
+schedules two-hour reminders. Admin-only `/api/admin/notifications` endpoints
+support status/history and audited retry; the lazy
+`/admin/dashboard/notifications` route uses the admin auth guard. Email remains
+on its existing path. See [notification operations](docs/NOTIFICATIONS.md) for
+migration 006, backfill, retry timing and mock delivery semantics.
+
+Manual notification sends use migration 007 request receipts and linked jobs. The
+admin resend endpoint enforces current kickoff and booking relevance; future
+automatic reminders keep their schedule when a separate manual send is queued.
+
+### Collection ledger
+
+Migration 008 creates the append-only `booking_collections` ledger. Manual cash and transfer receipts, verified gateway payments, legacy opening balances and reasoned reversals are stored with an authenticated actor where available. Ledger writes and the compatibility `bookings.amount_paid` balance share a transaction. The admin Collections report groups recorded receipts by Dhaka date, method and staff; refund settlements are reported separately because older refund channels were not captured. See [deployment and collection operations](docs/DEPLOYMENT.md).
+
+### Public customer flow and social metadata
+
+The booking page uses Dhaka Today/Tomorrow shortcuts, an available-only filter and a shared bilingual FAQ. Season booking shares the saved customer language preference and FAQ. `BrandingService` updates the in-browser title, description and Open Graph/Twitter tags; Express also renders route-specific title, description, canonical URL and share-image tags into `/` and `/season-booking` HTML for crawlers that do not execute Angular. `PUBLIC_SITE_URL` is the canonical production origin. Admin → Field Configuration stores an optional dedicated social image; public previews fall back to the first field photo and omit the image tag if no image exists. See [customer metadata deployment notes](docs/DEPLOYMENT.md#customer-pages-and-social-previews).

@@ -16,7 +16,7 @@
       <div class="summary-item" *ngIf="booking.refunded_amount != null"><span>{{ t('Refund recorded', 'ফেরত দেওয়া হয়েছে') }}</span><span>৳ {{ booking.refunded_amount | number:'1.2-2' }}</span></div>
     </div>
     <p *ngIf="!paymentResultBooking && paymentResultBookingId">{{ t('Booking ID', 'বুকিং নম্বর') }}: #{{ paymentResultBookingId }}</p>
-    <a *ngIf="appSettings?.turf_phone" [href]="'tel:' + appSettings.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }}</a>
+    <a *ngIf="appSettings?.turf_phone" [href]="'tel:' + appSettings?.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }}</a>
     <div class="modal-footer payment-result-actions">
       <button class="btn btn-secondary" *ngIf="paymentResultOutcome === 'error' && paymentResultBookingId" (click)="refreshPaymentResult()">{{ t('Check status again', 'আবার অবস্থা যাচাই করুন') }}</button>
       <button class="btn btn-secondary" *ngIf="(paymentResultOutcome === 'failed' || paymentResultOutcome === 'cancelled' || paymentResultOutcome === 'requested') && paymentResultBookingId" (click)="retryPaymentFromResult()">{{ t('Try payment', 'পেমেন্ট চেষ্টা করুন') }}</button>
@@ -29,10 +29,7 @@
 <div class="portal-container">
   <!-- Navbar -->
   <header class="navbar">
-    <div class="logo">
-      <span class="ball-icon">⚽</span>
-      <span class="logo-text">{{ appSettings?.turf_name || 'KICKOFF ARENA' }}</span>
-    </div>
+    <app-brand></app-brand>
     <nav>
       <button type="button" class="btn btn-secondary" (click)="toggleLanguage()" aria-label="Change booking language">{{ language === 'en' ? 'বাংলা' : 'English' }}</button>
       <a routerLink="/season-booking" class="btn btn-secondary">{{ t('📅 Season Booking', '📅 সিজন বুকিং') }}</a>
@@ -44,9 +41,9 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-content">
-      <span class="badge">{{ t('🔥 Premium 7-a-side Artificial Turf', '🔥 উন্নত মানের ৭ জনের কৃত্রিম ঘাসের মাঠ') }}</span>
+      <span class="badge">{{ t('Book your next game', 'পরের খেলার বুকিং করুন') }}</span>
       <h1>{{ t('Select a Slot & Start Playing', 'স্লট বেছে নিন, খেলা শুরু করুন') }}</h1>
-      <p>{{ t('Enjoy under-lights football with top-tier grass, spacious changing rooms, and free parking.', 'আলোকিত মাঠ, উন্নত ঘাস, প্রশস্ত পোশাক বদলানোর ঘর ও বিনামূল্যে পার্কিংয়ের সুবিধা উপভোগ করুন।') }}</p>
+      <p>{{ t('Choose an available time and send your booking request.', 'খালি সময় বেছে নিয়ে বুকিংয়ের অনুরোধ পাঠান।') }}</p>
     </div>
   </section>
 
@@ -64,7 +61,12 @@
           <input type="date" id="booking-date" data-dialog-return [(ngModel)]="selectedDate" (change)="onDateChange()" [disabled]="holdLoading"
             class="form-control date-input" [min]="todayDate" />
         </div>
+        <div class="date-shortcuts" role="group" [attr.aria-label]="t('Quick date selection', 'দ্রুত তারিখ বাছাই')">
+          <button type="button" class="btn btn-secondary" [class.selected]="selectedDate === todayDate" [attr.aria-pressed]="selectedDate === todayDate" [disabled]="holdLoading" (click)="selectDate(todayDate)">{{ t('Today', 'আজ') }}</button>
+          <button type="button" class="btn btn-secondary" [class.selected]="selectedDate === tomorrowDate" [attr.aria-pressed]="selectedDate === tomorrowDate" [disabled]="holdLoading" (click)="selectDate(tomorrowDate)">{{ t('Tomorrow', 'আগামীকাল') }}</button>
+        </div>
       </div>
+      <label class="available-filter"><input type="checkbox" [(ngModel)]="onlyAvailable" name="onlyAvailable"> {{ t('Show available slots only', 'শুধু খালি স্লট দেখান') }} <span *ngIf="onlyAvailable">({{ visibleAvailableCount }})</span></label>
       <div class="legend">
         <span class="legend-item"><span class="dot available"></span> {{ t('Available', 'খালি') }}</span>
         <span class="legend-item"><span class="dot held"></span> {{ t('Held', 'সাময়িক সংরক্ষিত') }}</span>
@@ -209,15 +211,17 @@
       <div *ngIf="slots.length === 0" class="no-slots">
         <p>{{ t('No active slots available for this date. Please configure turf slots in admin panel.', 'এই তারিখে কোনো স্লট পাওয়া যাচ্ছে না। অন্য তারিখ দেখুন।') }}</p>
       </div>
+      <div *ngIf="onlyAvailable && slots.length > 0 && visibleAvailableCount === 0" class="no-slots">
+        <p>{{ t('No slots are currently available on this date. Try another date.', 'এই তারিখে এখন কোনো খালি স্লট নেই। অন্য তারিখ দেখুন।') }}</p>
+      </div>
 
     </div>
   </main>
 
   <!-- Footer -->
-  <footer class="footer">
-    <p>&copy; 2025 Gazipur Turf. All Rights Reserved. Located at Dhanmondi, Dhaka.</p>
-    <p>Contact: +88017XXXXXXXX | email: play&#64;gazipurturf.com</p>
-  </footer>
+  <app-customer-faq [language]="language"></app-customer-faq>
+  <app-venue-info></app-venue-info>
+  <app-venue-footer [language]="language"></app-venue-footer>
 </div>
 
 <!-- Booking Modal Dialog -->
@@ -341,7 +345,7 @@
             <details class="policy-details">
               <summary>{{ t('Full policy & rescheduling', 'সম্পূর্ণ শর্ত ও সময় পরিবর্তন') }}<span class="policy-chevron" aria-hidden="true"></span></summary>
               <ul><li *ngFor="let rule of policy[language]">{{ rule }}</li></ul>
-              <a *ngIf="appSettings?.turf_phone" class="policy-contact" [href]="'tel:' + appSettings.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }} <span>{{ appSettings.turf_phone }}</span></a>
+              <a *ngIf="appSettings?.turf_phone" class="policy-contact" [href]="'tel:' + appSettings?.turf_phone">{{ t('Call the turf', 'মাঠে কল করুন') }} <span>{{ appSettings?.turf_phone }}</span></a>
             </details>
           </ng-container>
           <ng-template #policyUnavailable><p class="policy-unavailable" role="status">{{ t('Policy could not be loaded. Refresh before booking.', 'শর্ত লোড হয়নি। বুকিংয়ের আগে পেজ রিফ্রেশ করুন।') }}</p></ng-template>

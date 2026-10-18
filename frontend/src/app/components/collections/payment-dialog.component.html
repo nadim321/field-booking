@@ -1,0 +1,24 @@
+<div class="payment-overlay"><section bookingDialog [dialogBusy]="busy" (dialogClose)="closed.emit()" class="payment-dialog" aria-labelledby="payment-title">
+<div class="heading"><h2 id="payment-title">Receive Payment · Booking #{{bookingId}}</h2><button (click)="closed.emit()" [disabled]="busy" aria-label="Close payments">✕</button></div>
+<p *ngIf="error" role="alert" class="error">{{error}}</p><p *ngIf="notice" role="status" class="notice">{{notice}}</p><p *ngIf="loading">Loading payments…</p><button (click)="load()" [disabled]="busy||loading">Refresh payments</button>
+<ng-container *ngIf="data as d">
+<p>Booking status: {{d.status}}</p><div class="totals"><p>Booking price <strong>৳{{d.price | number:'1.2-2'}}</strong></p><p>Received <strong>৳{{d.received | number:'1.2-2'}}</strong></p><p>Outstanding <strong>৳{{d.outstanding | number:'1.2-2'}}</strong></p></div>
+<p *ngIf="+d.excess>0" class="error">Excess received: ৳{{d.excess | number:'1.2-2'}} — review required.</p>
+<p *ngIf="d.review_required" class="error">Historical payment mismatch. Reconcile the old record before adding payments.</p>
+<p *ngIf="d.advance_review" class="warning">Approved booking is below the required advance (৳{{d.required_advance | number:'1.2-2'}}). Staff review required; approval remains unchanged.</p>
+<form *ngIf="d.status!=='cancelled' && +d.outstanding>0 && !d.review_required" (ngSubmit)="collect()">
+<h3>Receive Payment</h3><div class="fields">
+<label>Amount (BDT)<input name="amount" type="number" min="0.01" step="0.01" [max]="d.outstanding" [(ngModel)]="amount" required [disabled]="busy"></label>
+<div><label for="payment-method">Payment method</label><select id="payment-method" name="method" [(ngModel)]="method" [disabled]="busy"><option value="cash">Cash</option><option value="bkash">bKash transfer</option><option value="nagad">Nagad transfer</option><option value="bank_transfer">Bank transfer</option></select></div>
+<label>Reference<input name="reference" [(ngModel)]="reference" maxlength="150" [required]="method!=='cash'" [disabled]="busy"></label>
+<label>Note (optional)<input name="note" [(ngModel)]="note" maxlength="500" [disabled]="busy"></label></div>
+<p class="hint">Records money already received by your logged-in account. Transfers are manually recorded; this does not verify or initiate a gateway payment.</p>
+<button class="receive-submit" type="submit" [disabled]="busy||loading">Receive Payment</button></form>
+<h3>Collection history</h3><p *ngIf="!d.entries.length">No collections recorded.</p>
+<div class="table-wrap"><table><thead><tr><th>Entry</th><th>Amount</th><th>Method / reference</th><th>Received by / time</th><th>Action</th></tr></thead><tbody><tr *ngFor="let e of d.entries" [attr.data-testid]="'collection-'+e.id">
+<td>#{{e.id}} · {{e.kind}}<p>{{e.note}}</p><small *ngIf="e.reversal_of">Reverses #{{e.reversal_of}}</small></td><td>৳{{e.amount | number:'1.2-2'}}</td><td>{{e.method}}<p>{{e.reference}}</p></td><td>{{e.actor_name || (e.method==='gateway'?'Gateway system':'Unknown legacy receiver')}}<br>{{e.created_at ? (e.created_at | date:'dd MMM yyyy, h:mm a':'+0600') : 'Original receipt time unknown'}}</td><td><button *ngIf="e.can_reverse && !d.review_required" (click)="reversing=e.id;reason=''" [disabled]="busy">Reverse entry #{{e.id}}</button></td>
+</tr></tbody></table></div>
+<form *ngIf="reversing" (ngSubmit)="reverse()"><h3>Reverse entry #{{reversing}}</h3><p>This corrects a mistaken entry; it does not refund money.</p><label>Reversal reason<textarea name="reason" [(ngModel)]="reason" required maxlength="500" [disabled]="busy"></textarea></label><button type="submit" [disabled]="busy||loading">Confirm reversal</button><button type="button" (click)="reversing=null" [disabled]="busy">Cancel reversal</button></form>
+<details *ngIf="d.gateway_history.length"><summary>Gateway transaction history (not added again to totals)</summary><p *ngFor="let g of d.gateway_history">{{g.tran_id}} · ৳{{g.amount | number:'1.2-2'}} · {{g.status}} · {{g.bank_tran_id}}</p></details>
+<p class="hint">Times shown in Asia/Dhaka. Legacy opening balances have unknown receipt details.</p>
+</ng-container></section></div>

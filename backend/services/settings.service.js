@@ -1,9 +1,8 @@
 /**
  * Settings Service
  * -----------------
- * Thin helper over the generic `app_settings` key-value table. Currently
- * only `advance_payment_percentage` is used, but this stays generic so
- * future admin-configurable values don't each need a new column/endpoint.
+ * Thin helper over the generic `app_settings` key-value table. Used by payment settings and venue branding. Structured venue updates
+ * are validated and saved transactionally by venue.service.
  */
 
 const db = require('../database');

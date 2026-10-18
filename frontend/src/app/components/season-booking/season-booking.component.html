@@ -1,134 +1,81 @@
 <div class="portal-container">
-  <!-- Navbar -->
   <header class="navbar">
-    <div class="logo">
-      <span class="ball-icon">⚽</span>
-      <span class="logo-text">KICKOFF <span class="accent">ARENA</span></span>
-    </div>
+    <app-brand></app-brand>
     <nav>
-      <a routerLink="/" class="btn btn-secondary admin-btn">Back to Booking</a>
+      <button type="button" class="btn btn-secondary" (click)="toggleLanguage()" aria-label="Change booking language">{{ language === 'en' ? 'বাংলা' : 'English' }}</button>
+      <a routerLink="/" class="btn btn-secondary">{{ t('Back to Booking', 'বুকিংয়ে ফিরে যান') }}</a>
     </nav>
   </header>
 
-  <!-- Hero Section -->
   <section class="hero">
     <div class="hero-content">
-      <span class="badge">📅 Standing Weekly Slot</span>
-      <h1>Book a Season Slot</h1>
-      <p>Lock in the same time every week for your team. Submit a request below and we'll confirm it within 1-2 days.
-      </p>
+      <span class="badge">{{ t('📅 Standing Weekly Slot', '📅 সাপ্তাহিক নির্দিষ্ট স্লট') }}</span>
+      <h1>{{ t('Book a Season Slot', 'সিজন স্লট বুক করুন') }}</h1>
+      <p>{{ t('Request the same time every week for your team. The venue will review your request.', 'আপনার দলের জন্য প্রতি সপ্তাহে একই সময়ে খেলার অনুরোধ পাঠান। মাঠ কর্তৃপক্ষ অনুরোধটি যাচাই করবে।') }}</p>
     </div>
   </section>
 
   <main class="booking-section">
-
-    <!-- Success state -->
     <div *ngIf="submitted" class="controls-card">
       <div class="no-slots">
-        <p>✅ Your season booking request has been submitted and is <strong>pending admin approval</strong>.</p>
-        <p>We'll text and email you once it's approved, and again each week as your slot is reserved.</p>
-        <button class="btn btn-primary" (click)="resetForm()">Submit Another Request</button>
+        <p>✅ {{ t('Your season booking request has been submitted and is pending venue approval.', 'আপনার সিজন বুকিং অনুরোধ পাঠানো হয়েছে। মাঠ কর্তৃপক্ষের অনুমোদনের অপেক্ষায় আছে।') }}</p>
+        <p>{{ t('We will contact you after it is reviewed.', 'অনুরোধ যাচাই হলে আমরা আপনার সঙ্গে যোগাযোগ করব।') }}</p>
+        <button class="btn btn-primary" (click)="resetForm()">{{ t('Submit another request', 'আরেকটি অনুরোধ পাঠান') }}</button>
       </div>
     </div>
 
-    <!-- Form -->
     <div class="controls-card" *ngIf="!submitted">
       <div class="control-group">
-        <label for="startDate">Start Date <span class="req">*</span></label>
-        <div class="input-wrapper">
-          <input type="date" id="startDate" [(ngModel)]="startDate" (change)="onStartDateChange()"
-            class="form-control date-input" [min]="todayDate" />
-        </div>
-        <span class="form-err" *ngIf="startDate">Weekly day: <strong>{{ selectedDayName }}</strong> (every week on this
-          day until your end date)</span>
+        <label for="startDate">{{ t('Start date', 'শুরুর তারিখ') }} <span class="req">*</span></label>
+        <div class="input-wrapper"><input type="date" id="startDate" [(ngModel)]="startDate" (change)="onStartDateChange()" class="form-control date-input" [min]="todayDate" /></div>
+        <span class="form-err" *ngIf="startDate">{{ t('Weekly day:', 'সাপ্তাহিক বার:') }} <strong>{{ selectedDayName }}</strong> · {{ t('repeats weekly until the end date', 'শেষ তারিখ পর্যন্ত প্রতি সপ্তাহে') }}</span>
       </div>
 
       <div class="control-group" *ngIf="startDate">
-        <label for="endDate">End Date <span class="req">*</span></label>
-        <div class="input-wrapper">
-          <input type="date" id="endDate" [(ngModel)]="endDate" class="form-control date-input" [min]="startDate"
-            [max]="maxEndDate" />
-        </div>
-        <span class="form-err">Maximum {{ MAX_RANGE_MONTHS }} months from your start date ({{ maxEndDate }})</span>
+        <label for="endDate">{{ t('End date', 'শেষ তারিখ') }} <span class="req">*</span></label>
+        <div class="input-wrapper"><input type="date" id="endDate" [(ngModel)]="endDate" class="form-control date-input" [min]="startDate" [max]="maxEndDate" /></div>
+        <span class="form-err">{{ t('Maximum', 'সর্বোচ্চ') }} {{ MAX_RANGE_MONTHS }} {{ t('months from the start date', 'মাস; সর্বশেষ তারিখ') }} ({{ maxEndDate }})</span>
       </div>
     </div>
 
-    <!-- Error state -->
-    <div *ngIf="errorMsg" class="alert error-alert">
-      <span class="alert-icon">⚠️</span>
-      <p>{{ errorMsg }}</p>
-    </div>
+    <div *ngIf="errorMsg" class="alert error-alert" role="alert"><span class="alert-icon">⚠️</span><p>{{ errorMsg }}</p></div>
+    <div *ngIf="loadingSlots" class="spinner-container" role="status"><div class="spinner"></div><p>{{ t('Loading available time slots…', 'খালি স্লট লোড হচ্ছে…') }}</p></div>
 
-    <!-- Loading slots -->
-    <div *ngIf="loadingSlots" class="spinner-container">
-      <div class="spinner"></div>
-      <p>Loading available time slots...</p>
-    </div>
-
-    <!-- Slot picker -->
     <div *ngIf="!submitted && !loadingSlots && startDate && slotOptions.length > 0" class="slots-container">
       <div class="category-block">
-        <h3>🕐 Choose a weekly time ({{ selectedDayName }}s)</h3>
+        <h3>{{ language === 'bn' ? '🕐 প্রতি সপ্তাহের ' + selectedDayName + ' খেলার সময় বেছে নিন' : '🕐 Choose a weekly time (' + selectedDayName + 's)' }}</h3>
         <div class="slots-grid">
-          <div *ngFor="let slot of slotOptions" class="slot-card status-available"
-            [ngClass]="{ 'status-booked': selectedSlotId === slot.id }" (click)="selectedSlotId = slot.id">
-            <div class="time">{{ formatTimeRange(slot) }}</div>
-            <div class="price">৳ {{ slot.price }} / Hr</div>
-            <div class="status-badge">{{ selectedSlotId === slot.id ? 'SELECTED' : 'AVAILABLE' }}</div>
-          </div>
+          <button type="button" *ngFor="let slot of slotOptions" class="slot-card status-available" [class.status-booked]="selectedSlotId === slot.id" [attr.aria-pressed]="selectedSlotId === slot.id" (click)="selectedSlotId = slot.id">
+            <span class="time">{{ formatTimeRange(slot) }}</span><span class="price">৳ {{ slot.price }} / {{ t('hour', 'ঘণ্টা') }}</span>
+            <span class="status-badge">{{ selectedSlotId === slot.id ? t('Selected', 'নির্বাচিত') : t('Available', 'খালি') }}</span>
+          </button>
         </div>
       </div>
     </div>
 
     <div *ngIf="!submitted && !loadingSlots && startDate && slotOptions.length === 0" class="no-slots">
-      <p>No active slot templates found. Please contact us directly to arrange a season booking.</p>
+      <p>{{ t('No active slot templates were found. Please contact the venue to arrange a season booking.', 'কোনো সক্রিয় স্লট পাওয়া যায়নি। সিজন বুকিংয়ের জন্য মাঠে যোগাযোগ করুন।') }}</p>
     </div>
 
-    <!-- Contact form -->
     <div class="controls-card" *ngIf="!submitted && selectedSlotId">
       <form (ngSubmit)="submitRequest()" #seasonForm="ngForm">
-        <div class="form-group">
-          <label for="custName">Customer / Team Contact Name <span class="req">*</span></label>
-          <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required
-            placeholder="Enter your name" />
-        </div>
-
-        <div class="form-group">
-          <label for="custPhone">Phone Number <span class="req">*</span></label>
-          <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" class="form-control" required
-            placeholder="017XXXXXXXX" />
-        </div>
-
-        <div class="form-group">
-          <label for="teamName">Team Name <span class="opt">(Optional)</span></label>
-          <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control"
-            placeholder="e.g. Dream Team FC" />
-        </div>
-
-        <div class="form-group">
-          <label for="custEmail">Email Address <span class="opt">(Optional)</span></label>
-          <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control"
-            placeholder="yourname@gmail.com" />
-        </div>
-
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary" [disabled]="!seasonForm.valid || submitting">
-            {{ submitting ? 'Submitting...' : 'Submit Season Booking Request' }}
-          </button>
-        </div>
+        <div class="form-group"><label for="custName">{{ t('Contact name', 'যোগাযোগের নাম') }} <span class="req">*</span></label>
+          <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required [placeholder]="t('Enter your name', 'আপনার নাম লিখুন')" /></div>
+        <div class="form-group"><label for="custPhone">{{ t('Phone number', 'ফোন নম্বর') }} <span class="req">*</span></label>
+          <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" class="form-control" required placeholder="017XXXXXXXX" /></div>
+        <div class="form-group"><label for="teamName">{{ t('Team name', 'দলের নাম') }} <span class="opt">({{ t('Optional', 'ঐচ্ছিক') }})</span></label>
+          <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control" [placeholder]="t('e.g. Dream Team FC', 'যেমন: ড্রিম টিম')" /></div>
+        <div class="form-group"><label for="custEmail">{{ t('Email address', 'ইমেইল ঠিকানা') }} <span class="opt">({{ t('Optional', 'ঐচ্ছিক') }})</span></label>
+          <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control" email placeholder="yourname@example.com" /></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary" [disabled]="!seasonForm.valid || submitting">{{ submitting ? t('Submitting…', 'পাঠানো হচ্ছে…') : t('Submit season booking request', 'সিজন বুকিং অনুরোধ পাঠান') }}</button></div>
       </form>
     </div>
-
   </main>
 
-  <footer class="footer">
-    <p>&copy; 2025 Gazipur Turf. All Rights Reserved. Located at Dhanmondi, Dhaka.</p>
-    <p>Contact: +88017XXXXXXXX | email: play&#64;gazipurturf.com</p>
-  </footer>
+  <app-customer-faq [language]="language"></app-customer-faq>
+  <app-venue-footer [language]="language"></app-venue-footer>
 </div>
 
-<!-- Toast Notifications -->
-<div class="toast" *ngIf="toastMsg" [ngClass]="toastType">
-  <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span>
-  <span class="toast-text">{{ toastMsg }}</span>
+<div class="toast" *ngIf="toastMsg" [ngClass]="toastType" role="status">
+  <span class="toast-icon">{{ toastType === 'success' ? '✔' : '❌' }}</span><span class="toast-text">{{ toastMsg }}</span>
 </div>

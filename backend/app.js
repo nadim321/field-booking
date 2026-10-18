@@ -2,6 +2,7 @@ require('./config/env');
 const express = require('express');
 const cors = require('cors');
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const db = require('./database');
 const { requestLog, errorHandler } = require('./middleware/observability');
 const config = require('./config/env');
@@ -30,6 +31,18 @@ function createApp({ publicPath = path.join(__dirname, 'public'), configure = ()
   configure(app);
   require('./routes')(app);
   app.use('/api', (req, res) => res.status(404).json({ message: 'API route not found' }));
+  app.get(['/', '/season-booking'], async (req, res, next) => {
+    try {
+      const [html, settings] = await Promise.all([
+        fs.readFile(path.join(publicPath, 'index.html'), 'utf8'),
+        db.cancellationReady ? require('./services/venue.service').read().catch(() => ({})) : Promise.resolve({})
+      ]);
+      const baseUrl = config.publicSiteUrl || `${req.protocol}://${req.get('host')}`;
+      const metadata = require('./services/share-metadata').pageMetadata(req.path, settings, baseUrl);
+      const response = require('./services/share-metadata').renderMetadata(html, metadata);
+      res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }).send(response);
+    } catch (error) { next(error); }
+  });
   app.use(express.static(publicPath));
   app.get('*', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
   app.use(errorHandler);

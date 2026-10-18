@@ -1,30 +1,28 @@
 <div class="dashboard-wrapper" [class.calendar-active]="activeTab === 'calendar'">
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-brand">
-      <span class="brand-icon">⚽</span>
-      <span class="brand-text">Turf Admin</span>
-    </div>
+    <div class="sidebar-brand"><app-brand></app-brand></div>
 
     <nav class="sidebar-menu">
-      <button (click)="activeTab = 'calendar'" [class.active]="activeTab === 'calendar'" class="menu-item">
+      <button (click)="navigateTab('calendar')" [class.active]="activeTab === 'calendar'" class="menu-item">
         <span class="menu-icon">▦</span> Booking Calendar
       </button>
-      <button (click)="activeTab = 'overview'" [class.active]="activeTab === 'overview'" class="menu-item">
+      <button (click)="navigateTab('overview')" [class.active]="activeTab === 'overview'" class="menu-item">
         <span class="menu-icon">📊</span> Overview
       </button>
-      <button (click)="activeTab = 'bookings'" [class.active]="activeTab === 'bookings'" class="menu-item">
+      <button (click)="navigateTab('bookings')" [class.active]="activeTab === 'bookings'" class="menu-item">
         <span class="menu-icon">📅</span> Bookings
-        <span class="badge badge-warn" *ngIf="stats?.bookings?.pending > 0">{{ stats.bookings.pending }}</span>
+        <span class="badge badge-warn" *ngIf="stats && stats.bookings.pending > 0">{{ stats.bookings.pending }}</span>
       </button>
-      <button (click)="activeTab = 'season'" [class.active]="activeTab === 'season'" class="menu-item">
+      <button (click)="navigateTab('season')" [class.active]="activeTab === 'season'" class="menu-item">
         <span class="menu-icon">🔁</span> Season Requests
         <span class="badge badge-warn" *ngIf="pendingRecurringCount > 0">{{ pendingRecurringCount }}</span>
       </button>
-      <button (click)="activeTab = 'slots'" [class.active]="activeTab === 'slots'" class="menu-item">
-        <span class="menu-icon">⚙️</span> Slot Setup
-      </button>
-      <button (click)="activeTab = 'blocking'; loadBlockPreview()" [class.active]="activeTab === 'blocking'" class="menu-item">
+      <a routerLink="/admin/dashboard/collections" [class.active]="activeTab === 'collections'" [attr.aria-current]="activeTab === 'collections' ? 'page' : null" class="menu-item"><span class="menu-icon">৳</span> Collections</a>
+      <a routerLink="/admin/dashboard/notifications" [class.active]="activeTab === 'notifications'" [attr.aria-current]="activeTab === 'notifications' ? 'page' : null" class="menu-item"><span class="menu-icon">✉</span> Notifications</a>
+      <a routerLink="/admin/dashboard/field-configuration" [class.active]="activeTab === 'field'" [attr.aria-current]="activeTab === 'field' ? 'page' : null" class="menu-item"><span class="menu-icon">🏟️</span> Field Configuration</a>
+      <a routerLink="/admin/dashboard/slot-setup" [class.active]="activeTab === 'slots'" [attr.aria-current]="activeTab === 'slots' ? 'page' : null" class="menu-item"><span class="menu-icon">⚙️</span> Slot Setup</a>
+      <button (click)="navigateTab('blocking')" [class.active]="activeTab === 'blocking'" class="menu-item">
         <span class="menu-icon">🚫</span> Bulk Blocking
       </button>
     </nav>
@@ -41,8 +39,8 @@
     <!-- Header -->
     <header class="content-header">
       <div class="header-title">
-        <h1>Admin Control Panel</h1>
-        <p>Manage bookings, configure turf slots, and analyze revenue.</p>
+        <h1>{{ pageTitle }}</h1>
+        <p>{{ pageDescription }}</p>
       </div>
       <div class="header-actions">
         <a routerLink="/" target="_blank" class="btn btn-secondary btn-sm">View Public Site &rarr;</a>
@@ -85,8 +83,8 @@
           <div class="kpi-card">
             <div class="kpi-icon icon-emerald">৳</div>
             <div class="kpi-data">
-              <span class="kpi-label">Total Earnings</span>
-              <span class="kpi-value">৳ {{ stats?.revenue?.total_approved || 0 }}</span>
+              <span class="kpi-label">Approved Booking Value</span>
+              <span class="kpi-value">৳ {{ (stats?.revenue?.approved_booking_value || 0) | number:'1.2-2' }}</span>
             </div>
           </div>
         </div>
@@ -95,19 +93,18 @@
         <div class="overview-grid">
           <div class="panel-card">
             <div class="panel-header">
-              <h3>💰 Revenue Summary</h3>
+              <h3>💰 Financial Summary · All time</h3>
             </div>
             <div class="panel-body">
               <div class="rev-details">
-                <div class="rev-item">
-                  <span class="rev-label">Paid Amount (Received):</span>
-                  <span class="rev-val text-green">৳ {{ stats?.revenue?.total_paid || 0 }}</span>
-                </div>
-                <div class="rev-item">
-                  <span class="rev-label">Pending Payments:</span>
-                  <span class="rev-val text-orange">৳ {{ stats?.revenue?.pending_payment || 0 }}</span>
+                <div class="rev-item" *ngFor="let metric of financialMetrics" [attr.data-testid]="'finance-' + metric.key">
+                  <span class="rev-label">{{ metric.label }}:</span>
+                  <span class="rev-val">৳ {{ (stats ? stats.revenue[metric.key] : 0) | number:'1.2-2' }}</span>
                 </div>
               </div>
+              <p class="financial-note">Received amounts are recorded payments, including partial payments and cancelled bookings. Net received is not profit.</p>
+              <p *ngIf="stats && stats.revenue.legacy_estimate_count > 0" class="financial-warning" role="status">{{ stats.revenue.legacy_estimate_count }} legacy booking price(s) were estimated using migration-time slot rates. Booking values and outstanding amounts may therefore be estimates.</p>
+              <p *ngIf="stats && stats.revenue.missing_paid_amount_count > 0" class="financial-warning" role="status">{{ stats.revenue.missing_paid_amount_count }} booking(s) are marked paid without a recorded received amount. Reconcile these records; no money has been inferred from their price.</p>
             </div>
           </div>
 
@@ -117,14 +114,14 @@
               <h3>🔥 Most Popular Playing Hours</h3>
             </div>
             <div class="panel-body">
-              <ul class="popular-slots-list" *ngIf="stats?.popular_slots?.length > 0">
+              <ul class="popular-slots-list" *ngIf="stats && stats.popular_slots.length > 0">
                 <li *ngFor="let slot of stats.popular_slots; let i = index">
                   <span class="slot-rank">#{{ i+1 }}</span>
                   <span class="slot-time">{{ slot.start_time }} - {{ slot.end_time }}</span>
                   <span class="slot-bookings">{{ slot.booking_count }} approved games</span>
                 </li>
               </ul>
-              <p *ngIf="!stats?.popular_slots || stats.popular_slots.length === 0" class="empty-state">
+              <p *ngIf="!stats?.popular_slots || stats?.popular_slots?.length === 0" class="empty-state">
                 No approved booking stats available yet.
               </p>
             </div>
@@ -137,7 +134,7 @@
             <h3>📈 Recent Occupancy (Last 7 Days)</h3>
           </div>
           <div class="panel-body">
-            <div class="occupancy-list" *ngIf="stats?.recent_occupancy?.length > 0">
+            <div class="occupancy-list" *ngIf="stats && stats.recent_occupancy.length > 0">
               <div class="occupancy-item" *ngFor="let day of stats.recent_occupancy">
                 <span class="occ-date">{{ day.booking_date }}</span>
                 <div class="occ-bar-container">
@@ -146,7 +143,7 @@
                 <span class="occ-count">{{ day.count }} slots booked</span>
               </div>
             </div>
-            <p *ngIf="!stats?.recent_occupancy || stats.recent_occupancy.length === 0" class="empty-state">
+            <p *ngIf="!stats?.recent_occupancy || stats?.recent_occupancy?.length === 0" class="empty-state">
               No booking history.
             </p>
           </div>
@@ -161,7 +158,7 @@
             <button (click)="setBookingFilter('all')" [class.active]="bookingFilter === 'all'"
               class="btn-filter">All</button>
             <button (click)="setBookingFilter('pending')" [class.active]="bookingFilter === 'pending'"
-              class="btn-filter filter-pending">Pending <span class="badge" *ngIf="stats?.bookings?.pending > 0">{{
+              class="btn-filter filter-pending">Pending <span class="badge" *ngIf="stats && stats.bookings.pending > 0">{{
                 stats.bookings.pending }}</span></button>
             <button (click)="setBookingFilter('approved')" [class.active]="bookingFilter === 'approved'"
               class="btn-filter filter-approved">Approved</button>
@@ -170,12 +167,30 @@
           </div>
         </div>
 
+        <form class="booking-query-bar" (ngSubmit)="searchBookings()">
+          <label class="booking-search-field">Search
+            <input name="bookingSearch" [(ngModel)]="bookingSearch" placeholder="Phone, team or booking ID" autocomplete="off" />
+          </label>
+          <label>From date<input name="bookingDateFrom" type="date" [(ngModel)]="bookingDateFrom" /></label>
+          <label>To date<input name="bookingDateTo" type="date" [(ngModel)]="bookingDateTo" /></label>
+          <label>Payment
+            <select name="bookingPaymentFilter" [(ngModel)]="bookingPaymentFilter">
+              <option value="">All payments</option><option value="unpaid">Unpaid</option>
+              <option value="partially_paid">Partially paid</option><option value="paid">Paid</option>
+            </select>
+          </label>
+          <button class="btn-query" type="submit" [disabled]="bookingsLoading">Search</button>
+          <button class="btn-query btn-query-muted" type="button" (click)="clearBookingFilters()" [disabled]="bookingsLoading">Clear</button>
+          <button class="btn-query btn-query-export" type="button" (click)="exportBookings()" [disabled]="bookingsExporting || bookingsTotal === 0">{{ bookingsExporting ? 'Preparing…' : 'Export CSV' }}</button>
+        </form>
+
         <!-- Bookings Table Panel -->
         <div class="table-card">
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th>Booking ID</th>
                   <th>Date</th>
                   <th>Time Slot</th>
                   <th>Customer Info</th>
@@ -188,6 +203,7 @@
               </thead>
               <tbody>
                 <tr *ngFor="let booking of filteredBookings">
+                  <td class="td-date">#{{ booking.id }}</td>
                   <td class="td-date">{{ booking.booking_date }}</td>
                   <td class="td-time highlight">{{ booking.start_time }} - {{ booking.end_time }}</td>
                   <td>
@@ -198,7 +214,7 @@
                     </div>
                   </td>
                   <td><span class="team-badge" *ngIf="booking.team_name">{{ booking.team_name }}</span></td>
-                  <td>৳ {{ booking.price }}</td>
+                  <td>৳ {{ booking.price | number:'1.2-2' }}<small *ngIf="booking.price_source === 'legacy_estimate'" class="legacy-price" title="Estimated from the slot rate when migration 004 ran; the original historical price is unknown.">Legacy estimate</small></td>
                   <td>
                     <span class="status-badge" [ngClass]="'status-' + booking.status">
                       {{ booking.status }}
@@ -225,10 +241,7 @@
                         (click)="openCancellation(booking)" title="Cancel Booking"
                         class="btn-action btn-act-cancel">❌</button>
 
-                      <!-- Mark Paid -->
-                      <button *ngIf="booking.payment_status === 'unpaid' && booking.status === 'approved'"
-                        (click)="updateBookingStatus(booking.id, '', 'paid')" title="Mark as Paid"
-                        class="btn-action btn-act-pay">৳</button>
+                      <button (click)="paymentBookingId=booking.id" [attr.aria-label]="'Receive Payment for booking '+booking.id" title="Receive Payment / History" class="btn-action btn-act-pay payment-action"><span aria-hidden="true">৳</span><span>Receive Payment</span></button>
 
                       <!-- Delete -->
                       <button (click)="deleteBooking(booking.id)" title="Delete Record"
@@ -237,10 +250,15 @@
                   </td>
                 </tr>
                 <tr *ngIf="filteredBookings.length === 0">
-                  <td colspan="8" class="empty-table">No records found matching filters.</td>
+                  <td colspan="9" class="empty-table">{{ bookingsLoading ? 'Loading bookings…' : 'No records found matching filters.' }}</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="booking-pagination">
+            <span>{{ bookingsTotal }} matching booking{{ bookingsTotal === 1 ? '' : 's' }} · Page {{ bookingsPage }} of {{ bookingsPageCount }}</span>
+            <div><button type="button" class="btn-query btn-query-muted" (click)="changeBookingsPage(-1)" [disabled]="bookingsPage <= 1 || bookingsLoading">Previous</button>
+              <button type="button" class="btn-query btn-query-muted" (click)="changeBookingsPage(1)" [disabled]="bookingsPage >= bookingsPageCount || bookingsLoading">Next</button></div>
           </div>
         </div>
       </section>
@@ -451,153 +469,9 @@
 
       </section>
 
-      <!-- ================= SLOTS SETUP TAB ================= -->
-      <section *ngIf="activeTab === 'slots'" class="tab-content fade-in">
-
-        <!-- App Settings Panel -->
-        <div class="panel-card" style="margin-bottom: 2rem;">
-          <div class="panel-header">
-            <h3>⚙️ App Settings</h3>
-          </div>
-          <div class="panel-body">
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label for="turfName">Turf Name</label>
-                <input type="text" id="turfName" name="turfName" [(ngModel)]="turfName" class="form-control" />
-              </div>
-              <div class="form-group col-md-6">
-                <label for="turfPhone">Contact Phone</label>
-                <input type="text" id="turfPhone" name="turfPhone" [(ngModel)]="turfPhone" class="form-control" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label for="turfEmail">Contact Email</label>
-                <input type="email" id="turfEmail" name="turfEmail" [(ngModel)]="turfEmail" class="form-control" />
-              </div>
-              <div class="form-group col-md-6">
-                <label for="turfAddress">Address</label>
-                <input type="text" id="turfAddress" name="turfAddress" [(ngModel)]="turfAddress" class="form-control" />
-              </div>
-            </div>
-            <div class="form-row" style="align-items: flex-end;">
-              <div class="form-group col">
-                <label for="advancePct">Required advance payment (% of slot price)</label>
-                <input type="number" id="advancePct" name="advancePct" [(ngModel)]="advancePaymentPercentage"
-                  class="form-control" min="1" max="100" step="1" />
-                <p class="empty-state" style="text-align: left; padding: 0; margin-top: 0.5rem;">
-                  Customers must pay this percentage of a slot's price via the payment gateway to automatically confirm
-                  their booking.
-                </p>
-              </div>
-              <div class="form-group col" style="flex: 0 0 auto;">
-                <button (click)="saveSettings()" class="btn btn-primary" [disabled]="settingsLoading">
-                  {{ settingsLoading ? 'Saving...' : 'Save Settings' }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section-actions">
-          <h3>Standard Hourly Turf Slot templates</h3>
-          <button (click)="openAddSlotModal()" class="btn btn-primary btn-sm">➕ Add Slot Config</button>
-        </div>
-
-        <div class="slots-management-grid">
-          <div *ngFor="let slot of slots" class="config-card" [class.config-blocked]="slot.is_active === 0">
-            <div class="config-card-header">
-              <span class="config-time">{{ slot.start_time }} - {{ slot.end_time }}</span>
-              <span class="config-status-badge" [class.badge-active]="slot.is_active === 1"
-                [class.badge-blocked]="slot.is_active === 0">
-                {{ slot.is_active === 1 ? 'Active' : 'Blocked' }}
-              </span>
-            </div>
-
-            <div class="config-card-body">
-              <span class="config-price">৳ {{ slot.price }} / Hr</span>
-              <span class="team-badge config-category-badge">{{ categoryLabel(slot.category) }}</span>
-            </div>
-
-            <div class="config-card-footer">
-              <!-- Toggle Active -->
-              <button (click)="toggleSlotActive(slot)" class="btn-action-text">
-                {{ slot.is_active === 1 ? '🚫 Block' : '⚡ Activate' }}
-              </button>
-
-              <!-- Edit -->
-              <button (click)="openEditSlotModal(slot)" class="btn-action-text btn-act-text-edit">
-                ✏️ Edit
-              </button>
-
-              <!-- Delete -->
-              <button (click)="deleteSlotConfig(slot.id)" class="btn-action-text btn-act-text-delete">
-                🗑️ Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <router-outlet></router-outlet>
 
     </main>
-  </div>
-</div>
-
-<!-- Add/Edit Slot Modal -->
-<div class="modal-backdrop" *ngIf="showSlotModal">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h2>{{ editingSlotId ? 'Edit Turf Slot Configuration' : 'Create Turf Slot Configuration' }}</h2>
-      <button class="close-btn" (click)="closeSlotModal()">&times;</button>
-    </div>
-
-    <div class="modal-body">
-      <form (ngSubmit)="saveSlotConfig()">
-        <div class="form-row">
-          <div class="form-group col">
-            <label for="startTime">Start Time (24h format)</label>
-            <input type="text" id="startTime" name="startTime" [(ngModel)]="slotStartTime" class="form-control" required
-              placeholder="e.g. 18:00" />
-          </div>
-          <div class="form-group col">
-            <label for="endTime">End Time (24h format)</label>
-            <input type="text" id="endTime" name="endTime" [(ngModel)]="slotEndTime" class="form-control" required
-              placeholder="e.g. 19:00" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="slotPrice">Slot Base Price (BDT/৳)</label>
-          <input type="number" id="slotPrice" name="slotPrice" [(ngModel)]="slotPrice" class="form-control" required
-            placeholder="e.g. 1500" />
-        </div>
-
-        <div class="form-group">
-          <label for="slotCategory">Category</label>
-          <select id="slotCategory" name="slotCategory" [(ngModel)]="slotCategory" class="form-control">
-            <option [ngValue]="null">-- Uncategorized --</option>
-            <option *ngFor="let cat of slotCategories" [ngValue]="cat.id">
-              {{ cat.label }} ({{ cat.hint }})
-            </option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="slotActive">Initial Status</label>
-          <select id="slotActive" name="slotActive" [(ngModel)]="slotIsActive" class="form-control">
-            <option [value]="1">Active (Bookable)</option>
-            <option [value]="0">Blocked (Reserved/Closed)</option>
-          </select>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeSlotModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary">
-            {{ editingSlotId ? 'Save Changes' : 'Create Slot' }}
-          </button>
-        </div>
-      </form>
-    </div>
   </div>
 </div>
 
@@ -630,3 +504,5 @@
     </div>
   </form>
 </div>
+
+<app-payment-dialog *ngIf="paymentBookingId" [bookingId]="paymentBookingId" (closed)="paymentBookingId=null" (changed)="collectionChanged()"></app-payment-dialog>

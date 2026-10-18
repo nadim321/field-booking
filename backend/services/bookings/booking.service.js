@@ -42,17 +42,18 @@ async function confirm(data, { requireHold = true } = {}) {
   if (data.policy_accepted !== true || data.policy_version !== VERSION) fail('Accept the current cancellation policy');
   if (requireHold && (typeof data.session_token !== 'string' || !data.session_token)) fail('Hold token is required');
   return transaction(async connection => {
-    await lockAvailableSlot(connection, data);
+    const slot = await lockAvailableSlot(connection, data);
     const [holds] = await connection.query('SELECT id, session_token FROM slot_holds WHERE slot_id = ? AND booking_date = ? AND expires_at > CURRENT_TIMESTAMP FOR UPDATE', [data.slot_id, data.booking_date]);
     const own = holds.find(row => row.session_token === data.session_token);
     if (requireHold && !own) fail('Invalid or expired hold token');
     if (holds.some(row => row !== own)) fail('Slot already held', 409);
     const [result] = await connection.query(`INSERT INTO bookings
-      (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP())`,
-    [data.slot_id, data.booking_date, data.customer_name.trim(), data.customer_phone.trim(), data.customer_email || null, data.team_name || null, VERSION]);
+      (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at, booking_price, price_source)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP(), ?, 'captured')`,
+    [data.slot_id, data.booking_date, data.customer_name.trim(), data.customer_phone.trim(), data.customer_email || null, data.team_name || null, VERSION, slot.price]);
+    await require('../notifications/outbox.service').created(connection, result.insertId);
     if (own) await connection.query('DELETE FROM slot_holds WHERE id = ?', [own.id]);
-    return { message: 'Booking confirmed', booking_id: result.insertId, details: { slot_id: data.slot_id, booking_date: data.booking_date, customer_name: data.customer_name.trim(), customer_phone: data.customer_phone.trim(), team_name: data.team_name || null } };
+    return { message: 'Booking confirmed', booking_id: result.insertId, details: { slot_id: data.slot_id, booking_date: data.booking_date, price: Number(slot.price), customer_name: data.customer_name.trim(), customer_phone: data.customer_phone.trim(), team_name: data.team_name || null } };
   });
 }
 module.exports = { hold, confirm, validateSlotDate };

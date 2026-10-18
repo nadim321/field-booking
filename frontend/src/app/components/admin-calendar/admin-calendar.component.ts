@@ -1,3 +1,4 @@
+import { PaymentDialogComponent } from '../collections/payment-dialog.component';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,7 +10,7 @@ import { DialogDirective } from '../../directives/dialog.directive';
 
 @Component({
   selector: 'app-admin-calendar', standalone: true,
-  imports: [CommonModule, FormsModule, DialogDirective],
+  imports: [PaymentDialogComponent, CommonModule, FormsModule, DialogDirective],
   templateUrl: './admin-calendar.component.html', styleUrl: './admin-calendar.component.css'
 })
 export class AdminCalendarComponent implements OnInit, OnDestroy {
@@ -27,6 +28,8 @@ export class AdminCalendarComponent implements OnInit, OnDestroy {
   loading = false;
   error = '';
   selectedKey: string | null = null;
+  paymentBookingId:number|null=null;
+  openPayments(id:number):void {this.selectedKey=null;this.paymentBookingId=id;}
 
   ngOnInit(): void {
     this.subscription.add(this.requests.pipe(switchMap(() => {

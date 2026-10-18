@@ -1,0 +1,41 @@
+<section class="settings" aria-labelledby="venue-settings-title">
+  <h3 id="venue-settings-title">Venue branding & settings</h3>
+  <p class="hint">Publish the real details of your field. Empty contact details, facilities and photos stay hidden.</p>
+  <p *ngIf="busy" role="status">Please wait…</p>
+  <p *ngIf="error" class="error" role="alert">{{ error }} <button *ngIf="!draft" (click)="load()">Retry</button></p>
+  <p *ngIf="message" class="success" role="status">{{ message }}</p>
+  <form *ngIf="draft as d" (ngSubmit)="save()" #form="ngForm">
+    <fieldset [disabled]="busy">
+      <p class="hint" *ngIf="!d.turf_name || !d.turf_address || !d.turf_phone || !d.turf_photos.length">Setup incomplete: add your venue name, address, contact number and real field photos when ready.</p>
+      <div class="grid">
+        <label>Venue name<input name="venueName" [(ngModel)]="d.turf_name" maxlength="120"></label>
+        <label>Contact phone<input name="venuePhone" [(ngModel)]="d.turf_phone" type="tel" maxlength="25" placeholder="Bangladesh mobile or +country code"></label>
+        <label>Contact email<input name="venueEmail" [(ngModel)]="d.turf_email" type="email" email maxlength="254"></label>
+        <label>WhatsApp number<input name="venueWhatsapp" [(ngModel)]="d.turf_whatsapp" type="tel" maxlength="25"></label>
+        <label class="wide">Address<textarea name="venueAddress" [(ngModel)]="d.turf_address" maxlength="500" rows="2"></textarea></label>
+        <label class="wide">Google Maps location link<input name="venueMaps" [(ngModel)]="d.turf_maps_url" type="url" maxlength="1000" placeholder="https://maps.app.goo.gl/…"></label>
+        <label class="wide">About the venue<textarea name="venueDescription" [(ngModel)]="d.turf_description" maxlength="1500" rows="3"></textarea></label>
+        <label>Facilities — one per line<textarea name="venueFacilities" [(ngModel)]="facilities" rows="5" aria-describedby="facility-hint"></textarea><small id="facility-hint">Only list facilities actually available. Up to 20 entries.</small></label>
+
+      </div>
+      <h4>Logo</h4>
+      <div class="logo-preview" *ngIf="d.turf_logo as logo"><img [src]="api.mediaUrl(logo.url)" alt="Logo preview"><button type="button" (click)="remove()">Remove logo</button></div>
+      <label class="upload">Upload logo<input type="file" accept="image/jpeg,image/png,image/webp" (change)="upload($event,'logo')"></label>
+      <h4>Social share preview image</h4>
+      <p class="hint">Used when customers share your booking page in chat or social apps. A wide image around 1200 × 630 works best. If empty, the first field photo is used.</p>
+      <div class="share-preview" *ngIf="d.turf_share_image as share"><img [src]="api.mediaUrl(share.url)" alt="Social share image preview"><button type="button" (click)="removeShareImage()">Remove share image</button></div>
+      <label class="upload">Upload social share image<input type="file" accept="image/jpeg,image/png,image/webp" (change)="upload($event,'share')"></label>
+      <h4>Field photos <small>{{ d.turf_photos.length }}/8 · First photo is the cover</small></h4>
+      <p class="hint">JPEG, PNG or WebP, up to 5 MB per image. Upload photos of your actual field.</p>
+      <div class="photos">
+        <article *ngFor="let photo of d.turf_photos; let i = index">
+          <img [src]="api.mediaUrl(photo.url)" [alt]="photo.caption || 'Field photo preview ' + (i+1)">
+          <label>Photo {{ i+1 }} caption<input [name]="'caption'+photo.id" [(ngModel)]="photo.caption" maxlength="160"></label>
+          <div class="actions"><button type="button" (click)="move(i,-1)" [disabled]="i === 0" [attr.aria-label]="'Move photo '+(i+1)+' earlier'">←</button><button type="button" (click)="move(i,1)" [disabled]="i === d.turf_photos.length-1" [attr.aria-label]="'Move photo '+(i+1)+' later'">→</button><button type="button" (click)="remove(i)" [attr.aria-label]="'Remove photo '+(i+1)">Remove</button></div>
+        </article>
+      </div>
+      <label class="upload" *ngIf="d.turf_photos.length < 8">Upload field photo<input type="file" accept="image/jpeg,image/png,image/webp" (change)="upload($event,'photo')"></label>
+      <button type="submit" class="save" [disabled]="form.invalid || busy">{{ busy ? 'Please wait…' : 'Save Settings' }}</button>
+    </fieldset>
+  </form>
+</section>

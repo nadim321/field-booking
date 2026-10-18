@@ -5,7 +5,7 @@ export interface CalendarSlot {
 export interface CalendarCell {
   slot_id: number; date: string; status: CalendarStatus; is_past: boolean; conflict: boolean;
   booking: { id: number; customer_name: string; customer_phone: string; team_name: string | null;
-    status: string; payment_status: string; amount_paid: number; balance_due: number } | null;
+    status: string; payment_status: string; price: number; price_source: 'captured' | 'legacy_estimate'; amount_paid: number; balance_due: number } | null;
   block_reason: string | null; hold_expires_at: string | null;
   seasons: { id: number; customer_name: string; customer_phone: string; team_name: string | null; start_date: string; end_date: string }[];
 }

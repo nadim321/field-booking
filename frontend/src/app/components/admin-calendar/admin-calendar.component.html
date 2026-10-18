@@ -62,11 +62,13 @@
         <div class="detail-status" [attr.data-status]="cell.status"><svg class="status-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path [attr.d]="statusIcon(cell.status)" /></svg>{{ statusLabel(cell.status) }}</div>
         <p class="detail-date">{{ cell.date + 'T00:00:00Z' | date:'EEEE, d MMMM yyyy':'UTC' }}</p>
         <p>{{ formatTime(slot.start_time) }} – {{ formatTime(slot.end_time) }}{{ overnight(slot) ? ' (+1 day)' : '' }} · Bangladesh time</p>
-        <p>Slot #{{ slot.id }} · Price ৳{{ slot.price | number:'1.2-2' }}</p>
+        <p>Slot #{{ slot.id }} · {{ cell.booking ? 'Booking price' : 'Current slot price' }} ৳{{ (cell.booking ? cell.booking.price : slot.price) | number:'1.2-2' }}</p>
+        <p *ngIf="cell.booking?.price_source === 'legacy_estimate'" class="error">Legacy estimate: this price was saved from the slot rate at migration time; the original booking price is unknown.</p>
         <p *ngIf="cell.is_past" class="note">This slot has ended.</p>
         <p *ngIf="!slot.is_active" class="note">This slot configuration is inactive.</p>
         <p *ngIf="cell.conflict" class="error">A staff block overlaps an existing booking. Review both records in Bookings and Bulk Blocking.</p>
         <dl *ngIf="cell.booking as booking">
+          <dt>Payments</dt><dd><button class="payment-action" (click)="openPayments(booking.id)"><span aria-hidden="true">৳</span> Receive Payment / History</button></dd>
           <dt>Booking</dt><dd>#{{ booking.id }} · {{ booking.status }}</dd>
           <dt>Customer</dt><dd>{{ booking.customer_name }}</dd><dt>Phone</dt><dd>{{ booking.customer_phone }}</dd>
           <ng-container *ngIf="booking.team_name"><dt>Team</dt><dd>{{ booking.team_name }}</dd></ng-container>
@@ -82,3 +84,5 @@
     <ng-template #removed><p>This slot is no longer in the latest calendar. Close this dialog to continue.</p></ng-template>
   </section>
 </div>
+
+<app-payment-dialog *ngIf="paymentBookingId" [bookingId]="paymentBookingId" (closed)="paymentBookingId=null" (changed)="refresh()"></app-payment-dialog>

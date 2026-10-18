@@ -38,6 +38,7 @@
  */
 
 const db = require('../../database');
+const outbox = require('../notifications/outbox.service');
 const notificationService = require('../notifications/notification.service');
 
 const GENERATION_WINDOW_DAYS = 50;
@@ -147,9 +148,10 @@ async function processTemplate(template) {
       }
 
       // Clear to generate this week's occurrence.
-      const insertResult = await dbRun(
-        `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, recurring_booking_id)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?)`,
+      const insertResult = await outbox.transaction(async connection => {
+        const [result] = await connection.query(
+        `INSERT INTO bookings (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, recurring_booking_id, booking_price, price_source)
+         SELECT ?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, s.price, 'captured' FROM slots s WHERE s.id = ?`,
         [
           template.slot_id,
           date,
@@ -157,15 +159,22 @@ async function processTemplate(template) {
           template.customer_phone,
           template.customer_email,
           template.team_name,
-          template.id
+          template.id,
+          template.slot_id
         ]
       );
+        if (result.affectedRows) await outbox.created(connection, result.insertId);
+        return { changes: result.affectedRows, lastID: result.insertId };
+      });
 
+      if (!insertResult.changes) continue;
+      const captured = await dbGet('SELECT booking_price FROM bookings WHERE id = ?', [insertResult.lastID]);
       // Reuse the standard booking-created notification, with the slot's
       // start/end time attached if the template row carries them (joined
       // in by the caller -- see runOnce()).
       notificationService.notifyBookingCreated({
         id: insertResult.lastID,
+        price: Number(captured.booking_price),
         booking_date: date,
         start_time: template.start_time,
         end_time: template.end_time,
@@ -190,7 +199,8 @@ async function runOnce() {
   let templates;
   try {
     templates = await dbAll(
-      `SELECT rb.*, s.start_time, s.end_time
+      `SELECT rb.*, DATE_FORMAT(rb.start_date, '%Y-%m-%d') AS start_date,
+              DATE_FORMAT(rb.end_date, '%Y-%m-%d') AS end_date, s.start_time, s.end_time
        FROM recurring_bookings rb
        JOIN slots s ON rb.slot_id = s.id
        WHERE rb.status = 'active'`,

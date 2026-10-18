@@ -59,8 +59,9 @@ function project({ slots, bookings, holds, blocks, seasons }, dates, now = new D
         booking: booking ? {
           id: booking.id, customer_name: booking.customer_name, customer_phone: booking.customer_phone,
           team_name: booking.team_name || null, status: booking.status, payment_status: booking.payment_status,
+          price: Number(booking.booking_price), price_source: booking.price_source,
           amount_paid: Number(booking.amount_paid || 0),
-          balance_due: Math.max(0, Math.round((slot.price - Number(booking.amount_paid || 0)) * 100) / 100)
+          balance_due: Math.max(0, Math.round((Number(booking.booking_price) - Number(booking.amount_paid || 0)) * 100) / 100)
         } : null,
         block_reason: block ? block.reason || 'Blocked by staff' : null,
         hold_expires_at: hold ? new Date(now.getTime() + Number(hold.seconds_remaining) * 1000).toISOString() : null,
@@ -79,7 +80,7 @@ async function read(start, end) {
     await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     await connection.beginTransaction();
     const [slots] = await connection.query('SELECT id, start_time, end_time, price, is_active FROM slots ORDER BY TIME(start_time), id');
-    const [bookings] = await connection.query(`SELECT id, slot_id, booking_date, customer_name, customer_phone, team_name, status, payment_status, amount_paid
+    const [bookings] = await connection.query(`SELECT id, slot_id, booking_date, customer_name, customer_phone, team_name, status, payment_status, amount_paid, booking_price, price_source
       FROM bookings WHERE booking_date BETWEEN ? AND ? AND status IN ('pending','approved')`, [start, end]);
     const [holds] = await connection.query(`SELECT slot_id, booking_date, TIMESTAMPDIFF(MICROSECOND, CURRENT_TIMESTAMP(6), expires_at) / 1000000 AS seconds_remaining
       FROM slot_holds WHERE booking_date BETWEEN ? AND ? AND expires_at > CURRENT_TIMESTAMP`, [start, end]);

@@ -31,7 +31,7 @@ async function confirmPaymentByValId(valId, sourceLabel) {
     return { ok: false, reason: 'Payment amount, currency or validation status did not match' };
   }
 
-  const booking = await dbGetAsync('SELECT b.id, s.price FROM bookings b JOIN slots s ON s.id = b.slot_id WHERE b.id = ?', [transaction.booking_id]);
+  const booking = await dbGetAsync('SELECT b.id, b.booking_price AS price FROM bookings b WHERE b.id = ?', [transaction.booking_id]);
   if (!booking) return { ok: false, reason: 'Booking not found' };
   const requiredAdvance = await computeRequiredAdvance(booking.price);
   const result = await cancellationService.creditValidatedPayment(transaction.id, transaction.booking_id, { ...validation, val_id: valId }, requiredAdvance);

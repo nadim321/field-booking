@@ -1,8 +1,12 @@
 # Deployment, monitoring and recovery
 
+Venue branding additionally requires migration **005** and production **MEDIA_DIR** outside the release directory. Follow the [venue media deployment and backup guide](VENUE_BRANDING.md). Backups now include a `.sql.gz.media/` directory and per-file checksums: retain it with the SQL and manifest, and stop writers/uploads/cleanup during the combined backup.
+
+Booking price snapshots require migration **004**, followed by venue migration **005**. Follow the [booking price rollout](BOOKING_PRICES.md#rollout): stop old writers and schedulers, back up, migrate, verify, then start the new release. Pre-004 writers are incompatible with the required snapshot columns.
+
 ## Prerequisites
 
-Use Node.js 22 or 24, MySQL 8, npm, `zip`/`unzip`, and matching MySQL client tools (`mysql`, `mysqldump`). The database must already exist. The migration user needs CREATE/ALTER/INDEX/REFERENCES privileges; runtime users need the normal application CRUD privileges. Copy `backend/.env.example` to a private `backend/.env` and populate existing database/payment/email settings. No service credentials belong in Git.
+Use Node.js 22 or 24, MySQL 8, npm, `zip`/`unzip`, and matching MySQL client tools (`mysql`, `mysqldump`). The database must already exist. The migration user needs CREATE/ALTER/INDEX/REFERENCES privileges; runtime users need the normal application CRUD privileges. Copy `backend/.env.example` to a private `backend/.env` and populate existing database/payment/email settings. Set `PUBLIC_SITE_URL` to the canonical public HTTPS origin in production; server-rendered booking/season titles and social share URLs use this value. No service credentials belong in Git.
 
 The backend now resolves `.env` relative to its own directory, so commands work from either the repository root or `backend`. Application startup no longer creates demo admins or slots. Existing data remains intact.
 
@@ -46,7 +50,7 @@ To test MySQL logic, set `RUN_DB_TESTS=1` and run `npm run test:integration --pr
 
 1. Create a database backup before the rollout; verify a restore into an empty staging database.
 2. Extract the release in a new server directory. Restore the private environment configuration and install runtime dependencies.
-3. Run `npm run migrate`. This adopts the existing unversioned schema without resetting existing tables. `schema_migrations` records the two baseline migrations plus `003-payment-attempts.js` and their checksums. The third migration adds payment initialization state, saved gateway session metadata, verified terminal status and booking-scoped idempotency keys. Old failed/cancelled records remain unverified until reconciled. MySQL DDL is not transactional: a partial failure is retried safely, never marked complete prematurely. Do not edit an applied migration; add the next numbered file to the runner's list.
+3. Run `npm run migrate`. This adopts the existing unversioned schema without resetting existing tables. `schema_migrations` records applied migrations and their checksums. Migration 003 adds payment initialization state, saved gateway session metadata, verified terminal status and booking-scoped idempotency keys. Migration 004 captures booking prices and marks migration-time backfills as legacy estimates. Migration 005 extends settings and adds venue media metadata. Migration 009 adds indexes for the admin booking search and date/status/payment filters. Old failed/cancelled payment records remain unverified until reconciled. MySQL DDL is not transactional: a partial failure is retried safely, never marked complete prematurely. Do not edit an applied migration; add the next numbered file to the runner's list.
 4. Run `npm run migrate:check`. Set `RUN_MIGRATIONS=false` if deployments run migrations separately; startup then verifies all known migrations have matching checksums. The compatibility default `RUN_MIGRATIONS=true` applies pending migrations before listening.
 5. Use `NODE_ENV=production`, a strong `JWT_SECRET`, the correct HTTPS frontend/gateway callback URLs, and `SCHEDULER_ENABLED=true` in only one process. Restart via the existing cPanel Node application manager/process supervisor.
 6. Verify `/health/ready`, admin login, slot availability, a staging hold/confirm and gateway sandbox callbacks before switching production traffic. Signal handling stops the scheduler, drains HTTP connections and closes the pool.
@@ -71,7 +75,7 @@ The monitor exits nonzero for unavailable/unready servers, with a five-second ti
 BACKUP_DIR=/private/booking-backups npm run backup --prefix backend
 ```
 
-The script uses an InnoDB consistent snapshot, streams gzip output, writes files with owner-only permissions and adds a SHA-256 manifest. Passwords are supplied through a temporary mode-0600 MySQL option file, not command-line arguments. Both client tools use explicit TCP with the same host/port as the application, including when DB_HOST is localhost. Both archive and `.json` manifest must be retained. It excludes MySQL routines/events because this app uses application-side scheduling; if custom database routines are introduced, extend the backup procedure first. Avoid schema migrations while a dump is running.
+The script uses an InnoDB consistent snapshot, streams gzip output, writes files with owner-only permissions and adds a SHA-256 manifest. Passwords are supplied through a temporary mode-0600 MySQL option file, not command-line arguments. Both client tools use explicit TCP with the same host/port as the application, including when DB_HOST is localhost. The SQL archive, `.json` manifest and accompanying `.sql.gz.media/` directory must be retained together. Stop application writers, uploads and cleanup throughout combined backup. It excludes MySQL routines/events because this app uses application-side scheduling; if custom database routines are introduced, extend the backup procedure first. Avoid schema migrations while a dump is running.
 
 Schedule daily backups and a backup before every migration; keep at least 7 daily and 4 weekly restore points. Copy them to encrypted storage outside the application host using your established storage tooling. This repository does not automatically upload or prune backups. A checksum detects accidental corruption, not malicious replacement; restrict access to both files.
 
@@ -80,7 +84,7 @@ Schedule daily backups and a backup before every migration; keep at least 7 dail
 Create a new empty target database with the same charset/collation as the source, using your DB administration tool. Restore only trusted backups:
 
 ```bash
-npm run restore --prefix backend -- /private/booking-backups/example.sql.gz booking_restore --confirm=booking_restore
+MEDIA_DIR=/var/lib/booking/restored-media npm run restore --prefix backend -- /private/booking-backups/example.sql.gz booking_restore --confirm=booking_restore
 ```
 
 The checksum is verified first. The script refuses any target that already contains tables/views and never drops or overwrites an existing database. If import fails after partial DDL, discard that temporary target and retry in a new empty database after resolving the cause.
@@ -105,4 +109,29 @@ npm run payment:reconcile -- --transaction TRANSACTION_ID
 
 Use the existing transaction ID from the payment records/provider dashboard. This command checks migrations without applying them, queries SSLCommerz server-to-server and records only matching verified outcomes. A valid result follows the existing transactional credit/refund logic. It never creates a payment session, transfers a refund, or blindly marks an unknown attempt failed. Output excludes customer data and gateway session URLs. Exit 0 means a verified terminal result, 2 means unresolved (inspect the merchant dashboard), and 1 means the command failed. Missing/ambiguous provider results stay blocked; do not manually clear them to enable another charge.
 
-Customer result/PDF access remains as before. The cancellation percentages and staff-managed refund policy are unchanged. Take a backup and apply migration 003 before running this release; stage-test real gateway callbacks and configured Sentry delivery separately.
+Customer result/PDF access remains as before. The cancellation percentages and staff-managed refund policy are unchanged. Take a backup and apply migrations through 008 before running this release; stage-test real gateway callbacks and configured Sentry delivery separately.
+
+### Mock booking notifications
+
+Apply migrations through 009 with the normal migration runner. Migration 007 enables
+manual Send now/Resend before kickoff while preserving future automatic reminders. The server starts the SMS
+simulation worker by default; `NOTIFICATION_WORKER_ENABLED=false` pauses it after
+restart. No SMS gateway credentials are required and no real SMS is sent. Review
+queued, failed and simulated jobs under Admin → Notifications. Database backups
+include job and attempt history; pause the worker while verifying a restore.
+See [notification operations](NOTIFICATIONS.md) for reminder eligibility, retry
+limits, recovery behavior and verification steps.
+
+### Staff collections and reversals
+
+Migration 008 creates a per-receipt ledger and backfills each current booking balance as a legacy opening entry. Those entries preserve totals but have no known receipt date, method or receiver; they are excluded from daily collections. Verified gateway callbacks add a ledger entry once. Staff cash/transfers are recorded under the authenticated admin. Booking balances and the ledger update transactionally. Manual corrections append a full reversal with a reason; they do not issue refunds or reopen/undo approval. Cancelled bookings cannot be manually collected or corrected through this flow.
+
+Open **Admin → Collections** for the Dhaka-date report, method/staff filters and CSV export, or open payment history from a booking/calendar entry. The report labels refunds separately because historical refund methods are not recorded. Backup and restore must include `booking_collections` and `collection_requests`; migration startup applies schema changes automatically unless `RUN_MIGRATIONS=false`. Use `RUN_DB_TESTS=1 node --test backend/tests/integration/collections.test.js` for the disposable-DB ledger/report tests. Browser coverage runs with the normal frontend Playwright suite.
+
+### Admin booking search and export
+
+The Bookings view searches phone/team text and exact numeric booking IDs, filters by booking date, booking status and payment status, and paginates 25 rows at a time. **Export CSV** uses the same active filters and exports all matching rows, independent of the current page. Migration 009 adds the booking date/status/payment indexes. Verify with `RUN_DB_TESTS=1 node --test backend/tests/integration/admin-booking-search.test.js` and the booking list Playwright case.
+
+### Customer pages and social previews
+
+The public booking page has Dhaka Today/Tomorrow shortcuts and an available-only filter. The season request page uses the same saved English/Bangla language preference and both customer pages include the shared bilingual FAQ. Admin → Field Configuration can publish a dedicated wide social image; server-rendered Open Graph/Twitter previews use it, falling back to the first venue photo. Without either image the page still has valid title, description and canonical metadata, but no image card. Set `PUBLIC_SITE_URL` to the site's HTTPS origin before production deployment so crawlers receive the correct canonical and absolute image URLs. Preview `/` and `/season-booking` with a social-card debugger after publishing changes; social platforms may cache old previews.

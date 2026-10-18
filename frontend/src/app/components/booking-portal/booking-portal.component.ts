@@ -1,3 +1,9 @@
+import { VenueInfoComponent } from '../venue/venue-info.component';
+import { BrandingService } from '../../services/branding.service';
+import { BrandComponent } from '../venue/brand.component';
+import { VenueFooterComponent } from '../venue/venue-footer.component';
+import { CustomerFaqComponent } from '../venue/customer-faq.component';
+import { dhakaToday, shiftDate } from '../../services/calendar';
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -34,7 +40,7 @@ interface HoldInfo {
 @Component({
   selector: 'app-booking-portal',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DialogDirective],
+  imports: [VenueInfoComponent, BrandComponent, VenueFooterComponent, CustomerFaqComponent, CommonModule, FormsModule, RouterLink, DialogDirective],
   templateUrl: './booking-portal.component.html',
   styleUrl: './booking-portal.component.css'
 })
@@ -80,6 +86,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   toggleLanguage(): void {
     this.language = this.language === 'en' ? 'bn' : 'en';
     try { localStorage.setItem('booking-language', this.language); } catch { /* Storage may be unavailable. */ }
+    this.branding.setCustomerPage('booking', this.language);
   }
 
   get advanceAmount(): number | null {
@@ -104,6 +111,8 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   selectedDate: string = '';
+  tomorrowDate: string = '';
+  onlyAvailable = false;
   slots: TurfSlot[] = [];
   loading: boolean = false;
   errorMsg: string = '';
@@ -162,16 +171,17 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   paymentResultBookingId: number | null = null; // kept for "Try Again" retry
 
   // Public app settings (dynamic turf info)
-  appSettings: any = null;
+  readonly branding = inject(BrandingService);
+  get appSettings() { return this.branding.settings(); }
 
   ngOnInit(): void {
     try { this.language = localStorage.getItem('booking-language') === 'bn' ? 'bn' : 'en'; } catch { /* Use English. */ }
-    this.todayDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit'
-    }).format(new Date());
+    this.todayDate = dhakaToday();
     this.selectedDate = this.todayDate;
+    this.tomorrowDate = shiftDate(this.todayDate, 1);
+    this.branding.setCustomerPage('booking', this.language);
 
-    this.apiService.getPublicSettings().subscribe({ next: settings => this.appSettings = settings, error: () => this.appSettings = null });
+
 
     this.loadSlots();
 
@@ -294,17 +304,25 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
     this.loadSlots();
   }
 
+  selectDate(date: string): void {
+    if (date === this.selectedDate || this.holdLoading) return;
+    this.selectedDate = date;
+    this.onDateChange();
+  }
+
+  get visibleAvailableCount(): number { return this.slots.filter(slot => slot.status === 'available').length; }
+
   /** Filters slots by their stored category field (set manually by the
    * admin -- never derived from start_time). Slots with no category
    * assigned yet (category === null) are deliberately excluded here and
    * shown separately via getUncategorizedSlots(), so nothing silently
    * disappears from the page while waiting to be categorized. */
   getSlotsByCategory(categoryId: number): TurfSlot[] {
-    return this.slots.filter(slot => slot.category === categoryId);
+    return this.slots.filter(slot => slot.category === categoryId && (!this.onlyAvailable || slot.status === 'available'));
   }
 
   getUncategorizedSlots(): TurfSlot[] {
-    return this.slots.filter(slot => slot.category === null || slot.category === undefined);
+    return this.slots.filter(slot => (slot.category === null || slot.category === undefined) && (!this.onlyAvailable || slot.status === 'available'));
   }
 
   /** Clean display text for the status badge (avoids showing a raw

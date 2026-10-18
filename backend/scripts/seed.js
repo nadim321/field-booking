@@ -7,7 +7,7 @@ async function seed() {
   const c = await db.promiseConnection();
   try {
     await c.beginTransaction();
-    const settings = { advance_payment_percentage: '25', turf_name: 'Dream Turf', turf_address: 'Dhaka, Bangladesh', turf_phone: '01700000000', turf_email: 'info@dreamturf.com' };
+    const settings = { advance_payment_percentage: '25' };
     for (const [key,value] of Object.entries(settings)) await c.query('INSERT IGNORE INTO app_settings (setting_key,setting_value) VALUES (?,?)',[key,value]);
     const [[count]] = await c.query('SELECT COUNT(*) AS n FROM slots');
     const defaultSlots = [

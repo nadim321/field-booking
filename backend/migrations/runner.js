@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const migrations = ['001-initial-schema.js', '002-cancellation.js', '003-payment-attempts.js'];
+const migrations = ['001-initial-schema.js', '002-cancellation.js', '003-payment-attempts.js', '004-booking-prices.js', '005-venue-branding.js', '006-notifications.js', '007-notification-resend.js', '008-collections.js', '009-booking-search.js'];
 function checksum(file) { return createHash('sha256').update(fs.readFileSync(path.join(__dirname, file))).digest('hex'); }
 async function run(pool) {
   const connection = await pool.promise().getConnection();
