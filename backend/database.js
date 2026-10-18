@@ -1,12 +1,16 @@
-const mysql = require('mysql2');
 const { database } = require('./config/env');
+const mysql = database.driver === 'mysql' ? require('mysql2') : null;
+const postgres = database.driver === 'postgres' ? require('./database/postgres') : null;
 let pool;
 let initialization;
 const db = {
   cancellationReady: false,
   initialize({ migrate = true } = {}) {
     if (initialization) return initialization;
-    pool = mysql.createPool({ ...database, waitForConnections: true, connectionLimit: 10, queueLimit: 100, connectTimeout: 10000 });
+    pool = database.driver === 'postgres'
+      ? postgres.createPool(database)
+      : mysql.createPool({ host: database.host, port: database.port, user: database.user, password: database.password,
+        database: database.database, waitForConnections: true, connectionLimit: 10, queueLimit: 100, connectTimeout: 10000 });
     initialization = (async () => {
       const migrations = require('./migrations/runner');
       if (migrate) await migrations.run(pool);

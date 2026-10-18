@@ -8,6 +8,8 @@ Booking price snapshots require migration **004**, followed by venue migration *
 
 Use Node.js 22 or 24, MySQL 8, npm, `zip`/`unzip`, and matching MySQL client tools (`mysql`, `mysqldump`). The database must already exist. The migration user needs CREATE/ALTER/INDEX/REFERENCES privileges; runtime users need the normal application CRUD privileges. Copy `backend/.env.example` to a private `backend/.env` and populate existing database/payment/email settings. Set `PUBLIC_SITE_URL` to the canonical public HTTPS origin in production; server-rendered booking/season titles and social share URLs use this value. No service credentials belong in Git.
 
+PostgreSQL is also supported by setting `DB_DRIVER=postgres`; MySQL remains the default. For Supabase, set `DATABASE_URL` to the server-side PostgreSQL connection URI from the Supabase dashboard and enable TLS with `DB_SSL=true` when required by that URI. The application uses its own PostgreSQL schema migrations and does not convert or copy data from an existing MySQL database. Use the PostgreSQL connection pooler for serverless hosts and a direct/session connection for a persistent backend. Keep the URI private and never expose it to the Angular frontend.
+
 The backend now resolves `.env` relative to its own directory, so commands work from either the repository root or `backend`. Application startup no longer creates demo admins or slots. Existing data remains intact.
 
 ## Verify and package

@@ -3,16 +3,24 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const migrations = ['001-initial-schema.js', '002-cancellation.js', '003-payment-attempts.js', '004-booking-prices.js', '005-venue-branding.js', '006-notifications.js', '007-notification-resend.js', '008-collections.js', '009-booking-search.js'];
 function checksum(file) { return createHash('sha256').update(fs.readFileSync(path.join(__dirname, file))).digest('hex'); }
+const postgres = require('../database/postgres');
+const isPostgres = connection => connection?.isPostgres === true;
 async function run(pool) {
   const connection = await pool.promise().getConnection();
   let locked = false;
   try {
-    const [[lock]] = await connection.query("SELECT GET_LOCK(CONCAT(DATABASE(), ':migrations'), 30) AS acquired");
-    if (!lock.acquired) throw new Error('Migration lock unavailable');
-    locked = true;
-    await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    if (isPostgres(connection)) {
+      await connection.query("SELECT pg_advisory_lock(hashtext(current_database() || ':migrations'))");
+      locked = true;
+    } else {
+      const [[lock]] = await connection.query("SELECT GET_LOCK(CONCAT(DATABASE(), ':migrations'), 30) AS acquired");
+      if (!lock.acquired) throw new Error('Migration lock unavailable');
+      locked = true;
+    }
+    const migrationTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
       name VARCHAR(100) PRIMARY KEY, checksum CHAR(64) NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB`);
+    )${isPostgres(connection) ? '' : ' ENGINE=InnoDB'}`;
+    await connection.query(isPostgres(connection) ? postgres.migrationSql(migrationTable) : migrationTable);
     const [applied] = await connection.query('SELECT name, checksum FROM schema_migrations');
     for (const file of migrations) {
       const existing = applied.find(row => row.name === file);
@@ -27,7 +35,11 @@ async function run(pool) {
       await connection.query('INSERT INTO schema_migrations (name, checksum) VALUES (?, ?)', [file, hash]);
     }
   } finally {
-    try { if (locked) await connection.query("SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':migrations'))"); }
+      try {
+        if (locked) await connection.query(isPostgres(connection)
+          ? "SELECT pg_advisory_unlock(hashtext(current_database() || ':migrations'))"
+          : "SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':migrations'))");
+      }
     finally { connection.release(); }
   }
 }

@@ -53,6 +53,12 @@ async function exportCsv(query,res,next){
   res.status(200).set({'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="bookings-${f.dateFrom||'all'}-${f.dateTo||'all'}.csv"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
   res.write('\uFEFF'+['Booking ID','Booking date','Start time','End time','Customer','Phone','Email','Team','Price BDT','Received BDT','Outstanding BDT','Refund due BDT','Refunded BDT','Refund outstanding BDT','Booking status','Payment status','Payment methods'].map(csvCell).join(',')+'\r\n');
   const sql=select+w.sql+' ORDER BY b.booking_date DESC,TIME(s.start_time) ASC,b.id DESC';
+  if(connection.isPostgres){
+    try { const [rows]=await connection.query(sql,w.values); for(const row of rows)res.write(csvRow(row)); res.end(); }
+    catch(error){ if(res.headersSent)res.destroy(error);else next(error); }
+    finally { connection.release(); }
+    return;
+  }
   const stream=connection.connection.query(sql,w.values).stream({highWaterMark:32});
   let released=false;
   const release=()=>{if(!released){released=true;connection.release();}};
