@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('node:path');
 const fs = require('node:fs');
+const { Readable } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const db = require('./database');
 const { requestLog, errorHandler } = require('./middleware/observability');
 const config = require('./config/env');
@@ -10,7 +12,7 @@ const sentry = require('./observability/sentry');
 const { serializeRuntimeConfig } = require('./config/runtime-config');
 const shareMetadata = require('./services/share-metadata');
 
-function createApp({ publicPath = path.join(__dirname, 'public'), configure = () => {} } = {}) {
+function createApp({ publicPath = path.join(__dirname, 'public'), frontendUrl = process.env.FRONTEND_URL, configure = () => {} } = {}) {
   sentry.initialize();
   const app = express();
   app.disable('x-powered-by');
@@ -49,12 +51,59 @@ function createApp({ publicPath = path.join(__dirname, 'public'), configure = ()
     app.use(express.static(publicPath));
     app.get('*', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
   } else {
-    app.get('/', (req, res) => res.json({ service: 'booking-api', status: 'ok' }));
-    app.get('/season-booking', (req, res) => {
-      const frontendUrl = process.env.FRONTEND_URL;
-      if (!frontendUrl) return res.status(503).json({ message: 'Frontend URL is not configured' });
-      try { return res.redirect(302, new URL('/season-booking', frontendUrl).toString()); }
-      catch { return res.status(503).json({ message: 'Frontend URL is invalid' }); }
+    app.use(async (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        return res.status(404).json({ message: 'Route not found' });
+      }
+      if (!frontendUrl) return res.status(502).json({ message: 'Frontend service is not configured' });
+      let upstreamBase;
+      let upstreamUrl;
+      try {
+        upstreamBase = new URL(frontendUrl);
+        if (!['http:', 'https:'].includes(upstreamBase.protocol) || upstreamBase.username || upstreamBase.password || upstreamBase.pathname !== '/' || upstreamBase.search || upstreamBase.hash) {
+          throw new Error('Invalid frontend URL');
+        }
+        const requestUrl = new URL(req.originalUrl, 'http://backend.invalid');
+        upstreamUrl = new URL(upstreamBase.origin);
+        upstreamUrl.pathname = requestUrl.pathname;
+        upstreamUrl.search = requestUrl.search;
+      } catch {
+        return res.status(502).json({ message: 'Frontend service URL is invalid' });
+      }
+
+      const headers = {};
+      for (const name of ['accept', 'accept-language', 'if-none-match', 'if-modified-since', 'range']) {
+        if (req.headers[name]) headers[name] = req.headers[name];
+      }
+      try {
+        const requestOptions = {
+          method: req.method,
+          headers,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(15000)
+        };
+        let upstream = await fetch(upstreamUrl, requestOptions);
+        // Static hosts may not have an SPA rewrite configured. Let Angular
+        // handle extensionless client routes when the upstream returns 404.
+        if (upstream.status === 404 && req.method === 'GET' && !path.extname(upstreamUrl.pathname)) {
+          await upstream.body?.cancel();
+          upstream = await fetch(new URL('/', upstreamBase), requestOptions);
+        }
+        res.status(upstream.status);
+        upstream.headers.forEach((value, name) => {
+          if (!['connection', 'content-encoding', 'content-length', 'keep-alive', 'transfer-encoding', 'upgrade'].includes(name.toLowerCase())) {
+            res.setHeader(name, value);
+          }
+        });
+        if (upstream.body && req.method !== 'HEAD') {
+          await pipeline(Readable.fromWeb(upstream.body), res);
+        } else {
+          res.end();
+        }
+      } catch {
+        if (res.headersSent) return res.destroy();
+        return res.status(502).json({ message: 'Frontend service is unavailable' });
+      }
     });
   }
   app.use(errorHandler);
