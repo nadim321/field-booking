@@ -113,6 +113,10 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
 
   reviewBooking(): void {
     if (!this.validDetails || this.remainingSeconds <= 0 || this.otpBusy) return;
+    if (this.appSettings?.booking_phone_otp_required !== true) {
+      this.otpSent = false; this.phoneVerified = true; this.bookingStep = 'payment';
+      return;
+    }
     this.otpBusy = true; this.otpError = '';
     this.apiService.requestCustomerOtp(this.customerPhone).subscribe({
       next: result => { this.otpSent = true; this.otpCode = result.debug_code || ''; this.bookingStep = 'payment'; this.otpBusy = false; },
@@ -503,7 +507,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   submitBooking(): void {
-    if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || !this.phoneVerified || this.amountNow === null) return;
+    if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || (this.appSettings?.booking_phone_otp_required === true && !this.phoneVerified) || this.amountNow === null) return;
     if (!this.customerName || !this.customerPhone) {
       this.showToast(this.t('Name and phone number are required', 'নাম ও মোবাইল নম্বর দিন'), 'error');
       return;

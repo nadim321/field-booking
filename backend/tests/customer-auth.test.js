@@ -16,6 +16,10 @@ test('legacy booking phone formats can be claimed after phone verification', () 
 
 test('OTP is one-time, creates a customer session, and links matching legacy bookings', async () => {
   const oldConnection = db.promiseConnection;
+  const oldEnabled = process.env.BOOKING_PHONE_OTP_REQUIRED;
+  const oldDefaultEnabled = process.env.MY_BOOKINGS_DEMO_CODE_ENABLED;
+  process.env.BOOKING_PHONE_OTP_REQUIRED = 'true';
+  process.env.MY_BOOKINGS_DEMO_CODE_ENABLED = 'false';
   let challenge = null;
   let customer = null;
   let nextId = 1;
@@ -57,6 +61,8 @@ test('OTP is one-time, creates a customer session, and links matching legacy boo
     const oldDebug = process.env.OTP_DEBUG_CODE;
     const originalLog = console.log;
     try {
+      // My Bookings must still use real OTP when booking verification is disabled.
+      process.env.BOOKING_PHONE_OTP_REQUIRED = 'false';
       process.env.OTP_LOG_CODE = 'true';
       process.env.NODE_ENV = 'production';
       delete process.env.OTP_DEBUG_CODE;
@@ -88,5 +94,39 @@ test('OTP is one-time, creates a customer session, and links matching legacy boo
       if (oldNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = oldNodeEnv;
       if (oldDebug === undefined) delete process.env.OTP_DEBUG_CODE; else process.env.OTP_DEBUG_CODE = oldDebug;
     }
-  } finally { db.promiseConnection = oldConnection; }
+  } finally {
+    db.promiseConnection = oldConnection;
+    if (oldEnabled === undefined) delete process.env.BOOKING_PHONE_OTP_REQUIRED; else process.env.BOOKING_PHONE_OTP_REQUIRED = oldEnabled;
+    if (oldDefaultEnabled === undefined) delete process.env.MY_BOOKINGS_DEMO_CODE_ENABLED; else process.env.MY_BOOKINGS_DEMO_CODE_ENABLED = oldDefaultEnabled;
+  }
+});
+
+test('demo login toggle accepts only the default code and creates a customer session that claims legacy bookings', async () => {
+  const oldConnection = db.promiseConnection;
+  const oldEnabled = process.env.BOOKING_PHONE_OTP_REQUIRED;
+  const oldDefaultEnabled = process.env.MY_BOOKINGS_DEMO_CODE_ENABLED;
+  const linked = [];
+  db.promiseConnection = async () => ({
+    async beginTransaction() {}, async commit() {}, async rollback() {}, release() {},
+    async query(sql, args) {
+      if (sql.startsWith('INSERT IGNORE INTO customers')) return [{ insertId: 17 }];
+      if (sql.startsWith('SELECT id, phone_e164 FROM customers')) return [[{ id: 17, phone_e164: args[0] }]];
+      if (sql.startsWith('UPDATE bookings') || sql.startsWith('UPDATE recurring_bookings')) { linked.push(sql); return [{ affectedRows: 1 }]; }
+      throw new Error(`Unexpected default OTP test query: ${sql}`);
+    }
+  });
+  try {
+    process.env.BOOKING_PHONE_OTP_REQUIRED = 'false';
+    process.env.MY_BOOKINGS_DEMO_CODE_ENABLED = 'true';
+    await assert.rejects(requestOtp('01712345678', '127.0.0.1'), { status: 409 });
+    await assert.rejects(verifyOtp('01712345678', '000000'), { status: 401 });
+    const result = await verifyOtp('01712345678', '123456');
+    assert.equal(require('jsonwebtoken').decode(result.token).role, 'customer');
+    assert.equal(result.customer.phone, '+8801712345678');
+    assert.equal(linked.length, 2);
+  } finally {
+    db.promiseConnection = oldConnection;
+    if (oldEnabled === undefined) delete process.env.BOOKING_PHONE_OTP_REQUIRED; else process.env.BOOKING_PHONE_OTP_REQUIRED = oldEnabled;
+    if (oldDefaultEnabled === undefined) delete process.env.MY_BOOKINGS_DEMO_CODE_ENABLED; else process.env.MY_BOOKINGS_DEMO_CODE_ENABLED = oldDefaultEnabled;
+  }
 });

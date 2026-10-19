@@ -7,5 +7,7 @@ export interface VenueSettings {
   turf_facilities: string[]; turf_logo_id: string | null; turf_logo: VenueMedia | null; turf_photos: VenuePhoto[];
   turf_share_image_id: string | null; turf_share_image: VenueMedia | null;
   cancellation_policy?: any;
+  booking_phone_otp_required?: boolean;
+  my_bookings_demo_code_enabled?: boolean;
 }
 export type VenueUpdate = Partial<Omit<VenueSettings, 'turf_logo' | 'turf_photos' | 'turf_share_image' | 'cancellation_policy'>> & { turf_photos?: { id: string; caption: string }[] };

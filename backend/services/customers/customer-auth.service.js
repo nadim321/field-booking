@@ -11,6 +11,10 @@ const RESEND_WAIT_MS = 60 * 1000;
 const MAX_PHONE_SENDS = 3;
 const MAX_IP_SENDS = 10;
 const MAX_VERIFY_ATTEMPTS = 5;
+const DEFAULT_OTP_CODE = '123456';
+
+function bookingPhoneOtpRequired() { return process.env.BOOKING_PHONE_OTP_REQUIRED === 'true'; }
+function myBookingsDemoCodeEnabled() { return process.env.MY_BOOKINGS_DEMO_CODE_ENABLED === 'true'; }
 
 function failure(message, status = 400) { return Object.assign(new Error(message), { status }); }
 function normalizePhone(input) {
@@ -31,6 +35,7 @@ function ipHash(ip) { return crypto.createHmac('sha256', jwtSecret).update(`otp-
 function maskPhone(phone) { return `${phone.slice(0, 4)}${'*'.repeat(Math.max(0, phone.length - 8))}${phone.slice(-4)}`; }
 
 async function requestOtp(inputPhone, ip, { provider = otpProvider, now = Date.now() } = {}) {
+  if (myBookingsDemoCodeEnabled()) throw failure('Demo code login is enabled. Use the default code to continue.', 409);
   const phone = normalizePhone(inputPhone);
   const hashedIp = ipHash(ip);
   const connection = await db.promiseConnection();
@@ -76,6 +81,10 @@ async function verifyOtp(inputPhone, inputCode, { now = Date.now() } = {}) {
   const phone = normalizePhone(inputPhone);
   const code = String(inputCode || '').trim();
   if (!/^\d{6}$/.test(code)) throw failure('Enter the 6-digit verification code', 400);
+  if (myBookingsDemoCodeEnabled()) {
+    if (code !== DEFAULT_OTP_CODE) throw failure('Invalid verification code', 401);
+    return createCustomerSession(phone);
+  }
   const connection = await db.promiseConnection();
   try {
     await connection.beginTransaction();
@@ -94,12 +103,7 @@ async function verifyOtp(inputPhone, inputCode, { now = Date.now() } = {}) {
     }
 
     await connection.query('UPDATE customer_otp_challenges SET consumed_at = ? WHERE id = ?', [new Date(now), challenge.id]);
-    await connection.query('INSERT IGNORE INTO customers (phone_e164) VALUES (?)', [phone]);
-    const [[customer]] = await connection.query('SELECT id, phone_e164 FROM customers WHERE phone_e164 = ?', [phone]);
-    const variants = phoneVariants(phone);
-    const marks = variants.map(() => '?').join(',');
-    await connection.query(`UPDATE bookings SET customer_id = ? WHERE customer_id IS NULL AND customer_phone IN (${marks})`, [customer.id, ...variants]);
-    await connection.query(`UPDATE recurring_bookings SET customer_id = ? WHERE customer_id IS NULL AND customer_phone IN (${marks})`, [customer.id, ...variants]);
+    const customer = await upsertCustomerAndClaimBookings(connection, phone);
     await connection.commit();
     const token = jwt.sign({ id: customer.id, role: 'customer', phone_e164: phone }, jwtSecret, { expiresIn: '30d' });
     return { message: 'Phone verified', token, customer: { id: Number(customer.id), phone: phone } };
@@ -109,4 +113,28 @@ async function verifyOtp(inputPhone, inputCode, { now = Date.now() } = {}) {
   } finally { connection.release(); }
 }
 
-module.exports = { requestOtp, verifyOtp, normalizePhone, phoneVariants, OTP_TTL_MS, MAX_VERIFY_ATTEMPTS };
+async function createCustomerSession(phone) {
+  const connection = await db.promiseConnection();
+  try {
+    await connection.beginTransaction();
+    const customer = await upsertCustomerAndClaimBookings(connection, phone);
+    await connection.commit();
+    const token = jwt.sign({ id: customer.id, role: 'customer', phone_e164: phone }, jwtSecret, { expiresIn: '30d' });
+    return { message: 'Phone verified', token, customer: { id: Number(customer.id), phone } };
+  } catch (error) {
+    try { await connection.rollback(); } catch { /* Transaction may already be committed. */ }
+    throw error;
+  } finally { connection.release(); }
+}
+
+async function upsertCustomerAndClaimBookings(connection, phone) {
+  await connection.query('INSERT IGNORE INTO customers (phone_e164) VALUES (?)', [phone]);
+  const [[customer]] = await connection.query('SELECT id, phone_e164 FROM customers WHERE phone_e164 = ?', [phone]);
+  const variants = phoneVariants(phone);
+  const marks = variants.map(() => '?').join(',');
+  await connection.query(`UPDATE bookings SET customer_id = ? WHERE customer_id IS NULL AND customer_phone IN (${marks})`, [customer.id, ...variants]);
+  await connection.query(`UPDATE recurring_bookings SET customer_id = ? WHERE customer_id IS NULL AND customer_phone IN (${marks})`, [customer.id, ...variants]);
+  return customer;
+}
+
+module.exports = { requestOtp, verifyOtp, normalizePhone, phoneVariants, OTP_TTL_MS, MAX_VERIFY_ATTEMPTS, bookingPhoneOtpRequired, myBookingsDemoCodeEnabled, DEFAULT_OTP_CODE };

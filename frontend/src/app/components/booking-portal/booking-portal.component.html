@@ -289,7 +289,7 @@
         </div>
         <div [hidden]="bookingStep !== 'payment'">
         <p class="review-customer">{{ customerName }} · {{ customerPhone }}</p>
-        <div class="form-group phone-verification" role="group" [attr.aria-label]="t('Phone verification', 'ফোন যাচাই')">
+        <div class="form-group phone-verification" *ngIf="appSettings?.booking_phone_otp_required === true" role="group" [attr.aria-label]="t('Phone verification', 'ফোন যাচাই')">
           <p>{{ phoneVerified ? t('Phone number verified ✓', 'ফোন নম্বর যাচাই হয়েছে ✓') : t('Verify your phone number to continue.', 'এগোতে ফোন নম্বর যাচাই করুন।') }}</p>
           <label *ngIf="otpSent && !phoneVerified" for="bookingOtp">{{ t('6-digit code', '৬ সংখ্যার কোড') }}</label>
           <input *ngIf="otpSent && !phoneVerified" id="bookingOtp" name="bookingOtp" [(ngModel)]="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
@@ -366,8 +366,8 @@
         </div>
         <div class="modal-footer booking-actions">
           <button type="button" class="btn btn-secondary" [disabled]="submitting" (click)="bookingStep === 'payment' ? bookingStep = 'details' : closeBookingModal()">{{ bookingStep === 'payment' ? t('Back', 'পেছনে') : t('Cancel', 'ফিরে যান') }}</button>
-          <button type="submit" class="btn btn-primary" [disabled]="!validDetails || submitting || otpBusy || remainingSeconds <= 0 || (bookingStep === 'payment' && (!phoneVerified || !policyAccepted || !appSettings?.cancellation_policy || amountNow === null))">
-            {{ submitting || otpBusy ? t('Please wait…', 'অপেক্ষা করুন…') : bookingStep === 'details' ? t('Verify phone & continue', 'ফোন যাচাই করে এগিয়ে যান') : paymentMethod === 'later' ? t('Request booking', 'বুকিং অনুরোধ করুন') : t('Continue to payment', 'পেমেন্টে এগিয়ে যান') }}
+          <button type="submit" class="btn btn-primary" [disabled]="!validDetails || !appSettings || submitting || otpBusy || remainingSeconds <= 0 || (bookingStep === 'payment' && ((appSettings.booking_phone_otp_required === true && !phoneVerified) || !policyAccepted || !appSettings.cancellation_policy || amountNow === null))">
+            {{ submitting || otpBusy ? t('Please wait…', 'অপেক্ষা করুন…') : bookingStep === 'details' ? (appSettings?.booking_phone_otp_required === true ? t('Verify phone & continue', 'ফোন যাচাই করে এগিয়ে যান') : t('Continue to payment', 'পেমেন্টে এগিয়ে যান')) : paymentMethod === 'later' ? t('Request booking', 'বুকিং অনুরোধ করুন') : t('Continue to payment', 'পেমেন্টে এগিয়ে যান') }}
           </button>
         </div>
       </form>

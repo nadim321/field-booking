@@ -64,14 +64,14 @@
           <input type="text" id="custName" name="custName" [(ngModel)]="customerName" class="form-control" required [placeholder]="t('Enter your name', 'আপনার নাম লিখুন')" /></div>
         <div class="form-group"><label for="custPhone">{{ t('Phone number', 'ফোন নম্বর') }} <span class="req">*</span></label>
           <input type="tel" id="custPhone" name="custPhone" [(ngModel)]="customerPhone" (ngModelChange)="onPhoneChange()" class="form-control" required pattern="(\\+?88)?01[3-9][0-9]{8}" placeholder="017XXXXXXXX" /></div>
-        <div class="form-group" *ngIf="otpSent && !phoneVerified"><label for="seasonOtp">{{ t('6-digit verification code', '৬ সংখ্যার যাচাই কোড') }}</label>
+        <div class="form-group" *ngIf="branding.settings()?.booking_phone_otp_required === true && otpSent && !phoneVerified"><label for="seasonOtp">{{ t('6-digit verification code', '৬ সংখ্যার যাচাই কোড') }}</label>
           <input type="text" id="seasonOtp" name="seasonOtp" [(ngModel)]="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
           <small>{{ t('We sent a code to your phone.', 'আপনার ফোনে কোড পাঠানো হয়েছে।') }}</small></div>
         <div class="form-group"><label for="teamName">{{ t('Team name', 'দলের নাম') }} <span class="opt">({{ t('Optional', 'ঐচ্ছিক') }})</span></label>
           <input type="text" id="teamName" name="teamName" [(ngModel)]="teamName" class="form-control" [placeholder]="t('e.g. Dream Team FC', 'যেমন: ড্রিম টিম')" /></div>
         <div class="form-group"><label for="custEmail">{{ t('Email address', 'ইমেইল ঠিকানা') }} <span class="opt">({{ t('Optional', 'ঐচ্ছিক') }})</span></label>
           <input type="email" id="custEmail" name="custEmail" [(ngModel)]="customerEmail" class="form-control" email placeholder="yourname@example.com" /></div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary" [disabled]="!seasonForm.valid || submitting">{{ submitting ? t('Please wait…', 'অপেক্ষা করুন…') : !otpSent ? t('Verify phone', 'ফোন যাচাই করুন') : !phoneVerified ? t('Verify code & submit', 'কোড যাচাই করে পাঠান') : t('Submit season booking request', 'সিজন বুকিং অনুরোধ পাঠান') }}</button></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary" [disabled]="!seasonForm.valid || !branding.settings() || submitting">{{ submitting ? t('Please wait…', 'অপেক্ষা করুন…') : branding.settings()?.booking_phone_otp_required !== true ? t('Submit season booking request', 'সিজন বুকিং অনুরোধ পাঠান') : !otpSent ? t('Verify phone', 'ফোন যাচাই করুন') : !phoneVerified ? t('Verify code & submit', 'কোড যাচাই করে পাঠান') : t('Submit season booking request', 'সিজন বুকিং অনুরোধ পাঠান') }}</button></div>
       </form>
     </div>
   </main>

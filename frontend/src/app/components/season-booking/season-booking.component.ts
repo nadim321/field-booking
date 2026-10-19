@@ -26,7 +26,7 @@ interface SlotOption {
 })
 export class SeasonBookingComponent implements OnInit {
   private apiService = inject(ApiService);
-  private branding = inject(BrandingService);
+  readonly branding = inject(BrandingService);
   language: 'en' | 'bn' = 'en';
   private slotRequest = 0;
 
@@ -177,6 +177,10 @@ export class SeasonBookingComponent implements OnInit {
       return;
     }
 
+    if (this.branding.settings()?.booking_phone_otp_required !== true) {
+      this.createSeasonRequest();
+      return;
+    }
     if (!this.otpSent) {
       this.submitting = true;
       this.apiService.requestCustomerOtp(this.customerPhone).subscribe({

@@ -53,7 +53,7 @@ exports.create = (req, res) => {
     db.run(
       `INSERT INTO recurring_bookings (slot_id, day_of_week, start_date, end_date, customer_name, customer_phone, customer_email, team_name, status, customer_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)`,
-      [slot_id, day_of_week, start_date, end_date, customer_name, customer_phone, customer_email, team_name, req.customer.id],
+      [slot_id, day_of_week, start_date, end_date, customer_name, customer_phone, customer_email, team_name, req.body.customer_id || null],
       function (err) {
         if (err) {
           return res.fail(err);

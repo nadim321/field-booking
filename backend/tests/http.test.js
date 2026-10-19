@@ -35,8 +35,18 @@ test('HTTP routing, authentication, errors and health without a database', async
     });
     await t.test('customer bookings and booking confirmation require phone verification', async () => {
       assert.equal((await fetch(base + '/api/customer/bookings')).status, 401);
-      const res = await fetch(base + '/api/slots/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      assert.equal(res.status, 401);
+      const oldEnabled = process.env.BOOKING_PHONE_OTP_REQUIRED;
+      try {
+        process.env.BOOKING_PHONE_OTP_REQUIRED = 'true';
+        const res = await fetch(base + '/api/slots/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        assert.equal(res.status, 401);
+        process.env.BOOKING_PHONE_OTP_REQUIRED = 'false';
+        const guestBooking = await fetch(base + '/api/slots/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        assert.equal(guestBooking.status, 400);
+        assert.equal((await guestBooking.json()).message, 'Enter a valid Bangladesh mobile number');
+      } finally {
+        if (oldEnabled === undefined) delete process.env.BOOKING_PHONE_OTP_REQUIRED; else process.env.BOOKING_PHONE_OTP_REQUIRED = oldEnabled;
+      }
     });
     await t.test('unknown API is JSON 404, not Angular index', async () => {
       const res = await fetch(base + '/api/does-not-exist');
