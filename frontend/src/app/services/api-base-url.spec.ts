@@ -10,7 +10,13 @@ describe('resolveApiBaseUrl', () => {
       .toBe('https://field-booking-back.onrender.com/api');
   });
 
-  it('falls back to same-origin API when no backend URL is configured', () => {
-    expect(resolveApiBaseUrl('booking.example.com')).toBe('/api');
+  it('uses the deployed backend when production config is missing or blank', () => {
+    const deployedBackend = 'https://field-booking-back.onrender.com/api';
+    expect(resolveApiBaseUrl('booking.example.com')).toBe(deployedBackend);
+    expect(resolveApiBaseUrl('booking.example.com', '  ')).toBe(deployedBackend);
+  });
+
+  it('keeps loopback test hosts on same-origin API routing', () => {
+    expect(resolveApiBaseUrl('127.0.0.1')).toBe('/api');
   });
 });

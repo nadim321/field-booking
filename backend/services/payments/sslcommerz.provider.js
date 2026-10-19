@@ -102,6 +102,26 @@ async function queryTransaction(tranId) {
   return bounded(getClient().transactionQueryByTransactionId({ tran_id: tranId }));
 }
 
+async function refundApi(params) {
+  if (!STORE_ID || !STORE_PASSWORD) throw new Error('SSLCommerz credentials are not configured');
+  const endpoint = new URL(IS_LIVE
+    ? 'https://securepay.sslcommerz.com/validator/api/merchantTransIDvalidationAPI.php'
+    : 'https://sandbox.sslcommerz.com/validator/api/merchantTransIDvalidationAPI.php');
+  endpoint.search = new URLSearchParams({ ...params, store_id: STORE_ID, store_passwd: STORE_PASSWORD, format: 'json' }).toString();
+  const response = await bounded(fetch(endpoint, { signal: AbortSignal.timeout(20000) }));
+  if (!response.ok) throw new Error(`SSLCommerz refund API returned HTTP ${response.status}`);
+  const payload = await response.json();
+  if (payload.APIConnect !== 'DONE') throw new Error(payload.APIConnect || 'SSLCommerz refund API connection failed');
+  return payload;
+}
+
+function initiateRefund({ bankTranId, refundTransId, amount, remarks, reference }) {
+  return refundApi({ bank_tran_id: bankTranId, refund_trans_id: refundTransId,
+    refund_amount: Number(amount).toFixed(2), refund_remarks: String(remarks).slice(0, 255), refe_id: String(reference).slice(0, 50), v: '1' });
+}
+
+function queryRefund(refundRefId) { return refundApi({ refund_ref_id: refundRefId }); }
+
 function isGatewayUrl(value) {
   try {
     const url = new URL(value);
@@ -149,6 +169,8 @@ module.exports = {
   initiateSession,
   validateTransaction,
   queryTransaction,
+  initiateRefund,
+  queryRefund,
   isGatewayUrl,
   verifyIpnSignature,
   IS_LIVE

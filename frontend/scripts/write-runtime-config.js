@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const configuredUrl = (process.env.API_BASE_URL || '').trim().replace(/\/+$/, '');
+const configuredUrl = (process.env.API_BASE_URL || 'https://field-booking-back.onrender.com/api').trim().replace(/\/+$/, '');
 if (configuredUrl) {
   const parsed = new URL(configuredUrl);
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {

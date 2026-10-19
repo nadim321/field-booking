@@ -48,9 +48,9 @@ async function confirm(data, { requireHold = true } = {}) {
     if (requireHold && !own) fail('Invalid or expired hold token');
     if (holds.some(row => row !== own)) fail('Slot already held', 409);
     const [result] = await connection.query(`INSERT INTO bookings
-      (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at, booking_price, price_source)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP(), ?, 'captured')`,
-    [data.slot_id, data.booking_date, data.customer_name.trim(), data.customer_phone.trim(), data.customer_email || null, data.team_name || null, VERSION, slot.price]);
+      (slot_id, booking_date, customer_name, customer_phone, customer_email, team_name, status, payment_status, cancellation_policy_version, policy_accepted_at, booking_price, price_source, customer_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'unpaid', ?, UTC_TIMESTAMP(), ?, 'captured', ?)`,
+    [data.slot_id, data.booking_date, data.customer_name.trim(), data.customer_phone.trim(), data.customer_email || null, data.team_name || null, VERSION, slot.price, data.customer_id || null]);
     await require('../notifications/outbox.service').created(connection, result.insertId);
     if (own) await connection.query('DELETE FROM slot_holds WHERE id = ?', [own.id]);
     return { message: 'Booking confirmed', booking_id: result.insertId, details: { slot_id: data.slot_id, booking_date: data.booking_date, price: Number(slot.price), customer_name: data.customer_name.trim(), customer_phone: data.customer_phone.trim(), team_name: data.team_name || null } };

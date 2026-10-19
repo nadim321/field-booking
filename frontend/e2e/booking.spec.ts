@@ -8,7 +8,8 @@ async function details(page: Page, online = false) {
   await page.locator('.slot-card.status-available').first().click();
   await page.locator('#custName').fill('Browser Test');
   await page.locator('#custPhone').fill('01700000000');
-  await page.getByRole('button', { name: 'Review booking', exact: true }).click();
+  await page.getByRole('button', { name: 'Verify phone & continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Verify phone', exact: true }).click();
   if (online) await page.locator('label.pay-option').filter({ hasText: 'Bkash' }).click();
   await page.locator('input[name="policyAccepted"]').check();
 }

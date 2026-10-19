@@ -59,9 +59,40 @@ class BulkSmsBdProvider {
   }
 }
 
+/** Configurable JSON SMS endpoint for the not-yet-selected OTP provider.
+ * Contract: POST {to,message,idempotency_key}; return 2xx on acceptance. */
+class OtpSmsProvider {
+  constructor({ apiUrl = process.env.SMS_API_URL || '', apiKey = process.env.SMS_API_KEY || '', senderId = process.env.SMS_SENDER_ID || '' } = {}) {
+    this.apiUrl = apiUrl;
+    this.apiKey = apiKey;
+    this.senderId = senderId;
+  }
+
+  async send({ to, message, idempotencyKey }) {
+    if (!this.apiUrl || !this.apiKey) {
+      if (process.env.NODE_ENV !== 'production') return new MockSmsProvider().send({ to, message });
+      return { success: false, error: 'OTP SMS provider is not configured' };
+    }
+    let endpoint;
+    try { endpoint = new URL(this.apiUrl); } catch { return { success: false, error: 'OTP SMS endpoint is invalid' }; }
+    if (endpoint.protocol !== 'https:') return { success: false, error: 'OTP SMS endpoint must use HTTPS' };
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}`, 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ to, message, sender_id: this.senderId || undefined, idempotency_key: idempotencyKey }),
+        signal: AbortSignal.timeout(10000)
+      });
+      return response.ok ? { success: true } : { success: false, error: `OTP SMS provider returned ${response.status}` };
+    } catch { return { success: false, error: 'OTP SMS delivery failed' }; }
+  }
+}
+
 module.exports = {
   MockSmsProvider,
   BulkSmsBdProvider,
+  OtpSmsProvider,
+  otpProvider: new OtpSmsProvider(),
   // Legacy, non-outbox notifications also remain simulated.
   activeProvider: new MockSmsProvider()
 };

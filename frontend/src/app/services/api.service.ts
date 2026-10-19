@@ -42,6 +42,37 @@ export class ApiService {
     this.tokenSubject.next(null);
   }
 
+  get customerToken(): string | null { return localStorage.getItem('customer_token'); }
+
+  requestCustomerOtp(phone: string): Observable<{ message: string; expires_in: number; debug_code?: string }> {
+    return this.http.post<{ message: string; expires_in: number; debug_code?: string }>(`${this.apiUrl}/customer/auth/request-otp`, { phone });
+  }
+
+  verifyCustomerOtp(phone: string, code: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/customer/auth/verify-otp`, { phone, code }).pipe(tap(response => {
+      localStorage.setItem('customer_token', response.token);
+    }));
+  }
+
+  isCustomerLoggedIn(): boolean {
+    const token = this.customerToken;
+    if (!token) return false;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.role !== 'customer' || typeof payload.exp !== 'number' || Date.now() / 1000 >= payload.exp) {
+        localStorage.removeItem('customer_token');
+        return false;
+      }
+      return true;
+    } catch { localStorage.removeItem('customer_token'); return false; }
+  }
+
+  logoutCustomer(): void { localStorage.removeItem('customer_token'); }
+
+  getCustomerBookings(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/customer/bookings`, { headers: new HttpHeaders({ Authorization: `Bearer ${this.customerToken || ''}` }) });
+  }
+
   isLoggedIn(): boolean {
     const token = this.token;
     if (!token) return false;
@@ -124,7 +155,7 @@ export class ApiService {
     policy_accepted: boolean;
     policy_version: string;
   }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/slots/confirm`, bookingData);
+    return this.http.post<any>(`${this.apiUrl}/slots/confirm`, bookingData, { headers: new HttpHeaders({ Authorization: `Bearer ${this.customerToken || ''}` }) });
   }
 
   /**
@@ -156,7 +187,7 @@ export class ApiService {
     customer_email?: string;
     team_name?: string;
   }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/recurring-bookings`, data);
+    return this.http.post<any>(`${this.apiUrl}/recurring-bookings`, data, { headers: new HttpHeaders({ Authorization: `Bearer ${this.customerToken || ''}` }) });
   }
 
   // --- Admin Dashboard Methods ---

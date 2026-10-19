@@ -2,8 +2,10 @@ const router = require('express').Router();
 const controller = require('../controllers/recurring.controller');
 const asyncHandler = require('../middleware/async-handler');
 const authenticateAdmin = require('../middleware/auth');
+const customerAuth = require('../middleware/customer-auth');
+const requireCustomerPhone = require('../middleware/require-customer-phone');
 
-router.post('/api/recurring-bookings', asyncHandler(controller.create));
+router.post('/api/recurring-bookings', customerAuth, requireCustomerPhone, asyncHandler(controller.create));
 router.get('/api/admin/recurring-bookings', authenticateAdmin, asyncHandler(controller.list));
 router.put('/api/admin/recurring-bookings/:id', authenticateAdmin, asyncHandler(controller.update));
 router.delete('/api/admin/recurring-bookings/:id', authenticateAdmin, asyncHandler(controller.remove));

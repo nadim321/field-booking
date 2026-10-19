@@ -63,6 +63,9 @@ export class SeasonBookingComponent implements OnInit {
   submitting: boolean = false;
   submitted: boolean = false;
   errorMsg: string = '';
+  otpCode = '';
+  otpSent = false;
+  phoneVerified = false;
 
   // Toast (mirrors booking-portal.component.ts pattern)
   toastMsg: string = '';
@@ -173,6 +176,30 @@ export class SeasonBookingComponent implements OnInit {
       this.errorMsg = this.t(`Season bookings can run for a maximum of ${this.MAX_RANGE_MONTHS} months.`, `সিজন বুকিং সর্বোচ্চ ${this.MAX_RANGE_MONTHS} মাসের জন্য করা যাবে।`);
       return;
     }
+
+    if (!this.otpSent) {
+      this.submitting = true;
+      this.apiService.requestCustomerOtp(this.customerPhone).subscribe({
+        next: result => { this.otpSent = true; this.otpCode = result.debug_code || ''; this.submitting = false; },
+        error: err => { this.submitting = false; this.errorMsg = err.error?.message || this.t('Could not send verification code.', 'যাচাই কোড পাঠানো যায়নি।'); }
+      });
+      return;
+    }
+    if (!this.phoneVerified) {
+      this.submitting = true;
+      this.apiService.verifyCustomerOtp(this.customerPhone, this.otpCode).subscribe({
+        next: () => { this.phoneVerified = true; this.createSeasonRequest(); },
+        error: err => { this.submitting = false; this.errorMsg = err.error?.message || this.t('Code verification failed.', 'কোড যাচাই করা যায়নি।'); }
+      });
+      return;
+    }
+    this.createSeasonRequest();
+  }
+
+  onPhoneChange(): void { this.otpSent = false; this.phoneVerified = false; this.otpCode = ''; }
+
+  private createSeasonRequest(): void {
+    if (!this.selectedSlotId) { this.submitting = false; return; }
 
     this.submitting = true;
     this.apiService.createRecurringBooking({

@@ -14,6 +14,7 @@ function createApp({ publicPath = path.join(__dirname, 'public'), frontendUrl = 
   sentry.initialize();
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   app.use(requestLog);
   app.use(cors());
   app.use(express.json({ limit: '100kb' }));

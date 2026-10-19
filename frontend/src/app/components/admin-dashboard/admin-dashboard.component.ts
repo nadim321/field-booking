@@ -22,6 +22,7 @@ interface BookingRecord {
   payment_status: 'paid' | 'unpaid' | 'partially_paid';
   refund_amount?: number;
   refunded_amount?: number;
+  refund_payout_status?: string | null;
   cancellation_source?: string;
   cancellation_reason?: string;
   created_at: string;
@@ -291,7 +292,7 @@ export class AdminDashboardComponent implements OnInit {
       next: result => {
         this.cancellationBusy = false;
         this.cancellationBooking = null;
-        this.showToast(result.already_cancelled ? 'Booking was already cancelled.' : `Booking cancelled. Refund due: ৳${result.refund_amount}. Process the refund separately.`, 'success');
+        this.showToast(result.already_cancelled ? 'Booking was already cancelled.' : `Booking cancelled. Refund due: ৳${result.refund_amount}. Automatic: ৳${result.refund_automatic_amount || 0}; manual: ৳${result.refund_manual_amount || 0}.`, 'success');
         this.loadBookings(); this.loadStats();
       },
       error: err => { this.cancellationBusy = false; this.cancellationError = err.error?.message || 'Cancellation failed'; }

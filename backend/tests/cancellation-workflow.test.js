@@ -27,6 +27,7 @@ function fixture() {
       if (sql.startsWith('SELECT * FROM booking_cancellations')) return [[...(state.cancellation ? [{ ...state.cancellation }] : [])]];
       if (sql.startsWith('SELECT * FROM payment_transactions')) return [[{ ...state.payment }]];
       if (sql.startsWith('SELECT id FROM refund_settlements')) return [[...state.settlements.filter(s => s.reference === args[0])]];
+      if (sql.startsWith('SELECT id FROM refund_payouts')) return [[]];
       if (sql.startsWith('INSERT INTO booking_cancellations')) {
         if (sql.includes('ON DUPLICATE KEY')) {
           state.cancellation.refund_amount += args[1];
@@ -39,7 +40,9 @@ function fixture() {
       } else if (sql.startsWith('INSERT INTO refund_settlements')) {
         state.settlements.push({ booking_id: args[0], amount: args[1], reference: args[2] });
       } else if (sql.startsWith('UPDATE booking_cancellations')) {
-        state.cancellation.refunded_amount = state.cancellation.refund_amount;
+        state.cancellation.refunded_amount += args[0];
+      } else if (sql.startsWith('UPDATE refund_payouts')) {
+        return [{ affectedRows: 1 }];
       } else if (sql.startsWith('UPDATE payment_transactions')) {
         state.payment.status = 'valid';
       } else if (sql.startsWith('UPDATE bookings SET amount_paid')) {
@@ -49,13 +52,18 @@ function fixture() {
     }
   };
   const db = { cancellationReady: true, getConnection(cb) { cb(null, { promise: () => connection, release() {} }); } };
-  const sandbox = { module: { exports: {} }, require: name => name === '../../database' ? db : policy, console };
+  const dependencies = {
+    '../payments/refund-payout.service': { queueForCancellation: async () => ({ queued_amount: 0, manual_amount: 500 }) },
+    '../notifications/outbox.service': { transition: async () => {}, gateway: async () => {} },
+    '../collections/collection.service': { gateway: async () => {} }
+  };
+  const sandbox = { module: { exports: {} }, require: name => name === '../../database' ? db : dependencies[name] || policy, console };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../services/bookings/cancellation.service.js'), 'utf8'), sandbox);
   return { service: sandbox.module.exports, state: () => state, failUpdate: () => failUpdate = true };
 }
 const validation = { status: 'VALID', amount: 250, currency: 'BDT', val_id: 'verified', tran_id: 'txn' };
 
-test('cancellation releases booking and records liability without recording a payout; retries are idempotent', async () => {
+test('cancellation releases booking, records liability and leaves unsupported refund methods for manual settlement', async () => {
   const f = fixture();
   await f.service.cancel(1, 'customer', 'Customer cannot attend', 2);
   assert.equal(f.state().booking.status, 'cancelled');

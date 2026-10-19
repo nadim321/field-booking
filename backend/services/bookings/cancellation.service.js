@@ -47,7 +47,14 @@ async function cancel(id, source, reason, adminId, previewOnly = false) {
     [id, quote.policy_version, source, reason.trim(), quote.refund_percent, quote.amount_paid, quote.refund_amount, adminId]);
     await connection.query("UPDATE bookings SET status = 'cancelled' WHERE id = ?", [id]);
     await outbox.transition(connection, booking, { status: 'cancelled' });
-    return { ...quote, booking_id: Number(id), refund_status: quote.refund_amount > 0 ? 'pending' : 'not_due', booking };
+    const payout = quote.refund_amount > 0
+      ? await require('../payments/refund-payout.service').queueForCancellation(connection, id, quote.refund_amount, reason.trim())
+      : { queued_amount: 0, manual_amount: 0 };
+    const refundStatus = quote.refund_amount <= 0 ? 'not_due'
+      : payout.queued_amount >= quote.refund_amount ? 'processing'
+        : payout.queued_amount > 0 ? 'partial_manual' : 'manual_required';
+    return { ...quote, booking_id: Number(id), refund_status: refundStatus, refund_automatic_amount: payout.queued_amount,
+      refund_manual_amount: payout.manual_amount, booking };
   });
 }
 
@@ -55,6 +62,8 @@ async function recordRefund(id, reference, expectedAmount, adminId) {
   if (typeof reference !== 'string' || !reference.trim() || reference.length > 150) throw failure('Original payment refund reference is required (up to 150 characters)', 400);
   return transaction(async connection => {
     await getBooking(connection, id);
+    const [[active]] = await connection.query("SELECT id FROM refund_payouts WHERE booking_id=? AND status IN ('pending','retrying','initiating','submitted') LIMIT 1 FOR UPDATE", [id]);
+    if (active) throw failure('An automatic refund is still processing. Wait for its final status before recording a manual refund.');
     const [[record]] = await connection.query('SELECT * FROM booking_cancellations WHERE booking_id = ? FOR UPDATE', [id]);
     if (!record) throw failure('No cancellation record found', 404);
     const amount = Math.round((Number(record.refund_amount) - Number(record.refunded_amount)) * 100) / 100;
@@ -63,7 +72,8 @@ async function recordRefund(id, reference, expectedAmount, adminId) {
     const [[used]] = await connection.query('SELECT id FROM refund_settlements WHERE reference = ?', [reference.trim()]);
     if (used) throw failure('This refund reference has already been recorded');
     await connection.query('INSERT INTO refund_settlements (booking_id, amount, reference, recorded_by) VALUES (?, ?, ?, ?)', [id, amount, reference.trim(), adminId]);
-    await connection.query('UPDATE booking_cancellations SET refunded_amount = refund_amount WHERE booking_id = ?', [id]);
+    await connection.query('UPDATE booking_cancellations SET refunded_amount = refunded_amount + ? WHERE booking_id = ?', [amount, id]);
+    await connection.query("UPDATE refund_payouts SET status='manual_settled',updated_at=CURRENT_TIMESTAMP WHERE booking_id=? AND status='manual_required'", [id]);
     return { message: 'Refund recorded; no money was transferred by this action', amount };
   });
 }
@@ -89,6 +99,7 @@ async function creditValidatedPayment(transactionId, bookingId, validation, requ
         (booking_id, policy_version, source, reason, refund_percent, amount_paid_at_cancellation, refund_amount, cancelled_by, cancelled_at)
         VALUES (?, 'legacy-goodwill', 'venue', 'Payment received after cancellation', 100, 0, ?, 0, UTC_TIMESTAMP())
         ON DUPLICATE KEY UPDATE refund_amount = refund_amount + VALUES(refund_amount)`, [booking.id, amount]);
+      await require('../payments/refund-payout.service').queueForCancellation(connection, booking.id, amount, 'Payment received after cancellation');
     }
     return { ok: true, bookingId: booking.id, autoApproved, notifyBooking: autoApproved && booking.status !== 'approved' ? { ...booking, amount_paid: newAmountPaid } : null };
   });

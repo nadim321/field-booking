@@ -227,7 +227,8 @@
                     <div *ngIf="booking.refund_amount != null">
                       Refund due: ৳{{ booking.refund_amount | number:'1.2-2' }}<br />
                       Returned: ৳{{ booking.refunded_amount | number:'1.2-2' }}
-                      <button *ngIf="(booking.refund_amount || 0) > (booking.refunded_amount || 0)" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
+                      <span *ngIf="booking.refund_payout_status">Automatic refund: {{ booking.refund_payout_status.replace('_', ' ') }}</span>
+                      <button *ngIf="(booking.refund_amount || 0) > (booking.refunded_amount || 0) && !['pending','retrying','initiating','submitted'].includes(booking.refund_payout_status || '')" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
                     </div>
                   </td>
                   <td>
@@ -495,7 +496,7 @@
       <p>Received: ৳{{ cancellationQuote.amount_paid | number:'1.2-2' }}</p>
       <p>Refund entitlement: <strong>{{ cancellationQuote.refund_percent }}% — ৳{{ cancellationQuote.refund_amount | number:'1.2-2' }}</strong></p>
       <p *ngIf="cancellationQuote.policy_version === 'legacy-goodwill'">This booking predates recorded policy acceptance. A full goodwill refund applies.</p>
-      <p>The amount is recalculated when you confirm. Cancellation releases the slot; money must be refunded separately to the original payment method.</p>
+            <p>The amount is recalculated when you confirm. Eligible SSLCOMMERZ payments are refunded automatically; cash or unsupported transactions require manual settlement.</p>
     </div>
     <p *ngIf="cancellationQuote?.already_cancelled">This booking was already cancelled. Refresh the booking list.</p>
     <div class="cancellation-actions">

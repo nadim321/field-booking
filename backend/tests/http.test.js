@@ -33,6 +33,11 @@ test('HTTP routing, authentication, errors and health without a database', async
         assert.ok([401, 403].includes(res.status));
       }
     });
+    await t.test('customer bookings and booking confirmation require phone verification', async () => {
+      assert.equal((await fetch(base + '/api/customer/bookings')).status, 401);
+      const res = await fetch(base + '/api/slots/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      assert.equal(res.status, 401);
+    });
     await t.test('unknown API is JSON 404, not Angular index', async () => {
       const res = await fetch(base + '/api/does-not-exist');
       assert.equal(res.status, 404);

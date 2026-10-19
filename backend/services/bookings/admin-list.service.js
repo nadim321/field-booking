@@ -31,6 +31,7 @@ function where(f) {
 }
 const select=`SELECT b.*,s.start_time,s.end_time,b.booking_price AS price,c.refund_amount,c.refunded_amount,
  c.source AS cancellation_source,c.reason AS cancellation_reason,
+ (SELECT rp.status FROM refund_payouts rp WHERE rp.booking_id=b.id ORDER BY rp.id DESC LIMIT 1) AS refund_payout_status,
  COALESCE(pm.methods,b.payment_method,'unknown') AS payment_methods
  FROM bookings b JOIN slots s ON s.id=b.slot_id LEFT JOIN booking_cancellations c ON c.booking_id=b.id
  LEFT JOIN (SELECT booking_id,GROUP_CONCAT(DISTINCT method ORDER BY method SEPARATOR ', ') AS methods

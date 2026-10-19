@@ -2,6 +2,7 @@
 if (process.env.NODE_ENV !== 'test') throw new Error('Browser fixture requires NODE_ENV=test');
 process.env.SENTRY_DSN = '';
 process.env.SENTRY_FRONTEND_DSN = '';
+process.env.OTP_DEBUG_CODE = 'true';
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const config = require('../config/env');
@@ -47,7 +48,7 @@ process.once('SIGINT', stop);
         let connection;
         try {
           connection = await db.promiseConnection();
-          for (const table of ['payment_attempt_keys', 'refund_settlements', 'booking_cancellations', 'payment_transactions', 'bookings', 'slot_holds', 'slot_blocks', 'recurring_bookings', 'slots', 'app_settings']) await connection.query(`DELETE FROM ${table}`);
+          for (const table of ['refund_payouts', 'payment_attempt_keys', 'refund_settlements', 'booking_cancellations', 'payment_transactions', 'bookings', 'slot_holds', 'slot_blocks', 'recurring_bookings', 'customer_otp_challenges', 'customers', 'slots', 'app_settings']) await connection.query(`DELETE FROM ${table}`);
           await connection.query("INSERT INTO slots (id,start_time,end_time,price,is_active,category) VALUES (1,'18:00','19:00',2000,1,3),(2,'19:00','20:00',2000,1,3)");
           await connection.query("INSERT INTO app_settings (setting_key,setting_value) VALUES ('advance_payment_percentage','25'),('turf_name','Test Turf'),('turf_phone','01700000000')");
           sessions.clear();

@@ -53,6 +53,11 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   bookingStep: 'details' | 'payment' = 'details';
   submitting = false;
   policyAccepted = false;
+  otpCode = '';
+  otpSent = false;
+  phoneVerified = false;
+  otpBusy = false;
+  otpError = '';
 
   t(en: string, bn: string): string { return this.language === 'bn' ? bn : en; }
 
@@ -107,7 +112,25 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   reviewBooking(): void {
-    if (this.validDetails && this.remainingSeconds > 0) this.bookingStep = 'payment';
+    if (!this.validDetails || this.remainingSeconds <= 0 || this.otpBusy) return;
+    this.otpBusy = true; this.otpError = '';
+    this.apiService.requestCustomerOtp(this.customerPhone).subscribe({
+      next: result => { this.otpSent = true; this.otpCode = result.debug_code || ''; this.bookingStep = 'payment'; this.otpBusy = false; },
+      error: err => { this.otpError = err.error?.message || this.t('Could not send verification code.', 'যাচাই কোড পাঠানো যায়নি।'); this.otpBusy = false; }
+    });
+  }
+
+  onCustomerPhoneChange(): void {
+    this.otpSent = false; this.phoneVerified = false; this.otpCode = ''; this.otpError = '';
+  }
+
+  verifyBookingPhone(): void {
+    if (!this.otpSent || !this.otpCode.trim() || this.otpBusy) return;
+    this.otpBusy = true; this.otpError = '';
+    this.apiService.verifyCustomerOtp(this.customerPhone, this.otpCode).subscribe({
+      next: () => { this.phoneVerified = true; this.otpBusy = false; },
+      error: err => { this.otpError = err.error?.message || this.t('Code verification failed.', 'কোড যাচাই করা যায়নি।'); this.otpBusy = false; }
+    });
   }
 
   selectedDate: string = '';
@@ -378,6 +401,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
         this.showModal = true;
         this.bookingStep = 'details';
         this.policyAccepted = false;
+        this.otpCode = ''; this.otpSent = false; this.phoneVerified = false; this.otpError = '';
 
         // Reset form fields
         // Preserve details when the customer changes slots or a hold expires.
@@ -479,7 +503,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   }
 
   submitBooking(): void {
-    if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || this.amountNow === null) return;
+    if (!this.selectedSlot || !this.holdInfo || this.submitting || this.remainingSeconds <= 0 || !this.policyAccepted || !this.appSettings?.cancellation_policy?.version || this.bookingStep !== 'payment' || !this.validDetails || !this.phoneVerified || this.amountNow === null) return;
     if (!this.customerName || !this.customerPhone) {
       this.showToast(this.t('Name and phone number are required', 'নাম ও মোবাইল নম্বর দিন'), 'error');
       return;

@@ -4,6 +4,9 @@ import { BookingPortalComponent } from './components/booking-portal/booking-port
 import { AdminLoginComponent } from './components/admin-login/admin-login.component';
 import { AdminDashboardComponent } from './components/admin-dashboard/admin-dashboard.component';
 import { SeasonBookingComponent } from './components/season-booking/season-booking.component';
+import { CustomerLoginComponent } from './components/customer-login/customer-login.component';
+import { MyBookingsComponent } from './components/my-bookings/my-bookings.component';
+import { customerGuard } from './guards/customer.guard';
 
 export const routes: Routes = [
   { path: '', component: BookingPortalComponent },
@@ -15,5 +18,7 @@ export const routes: Routes = [
     { path: 'slot-setup', canActivate: [adminGuard], loadComponent: () => import('./components/slot-setup/slot-setup.component').then(m => m.SlotSetupComponent) }
   ] },
   { path: 'season-booking', component: SeasonBookingComponent },
+  { path: 'customer/login', component: CustomerLoginComponent },
+  { path: 'my-bookings', component: MyBookingsComponent, canActivate: [customerGuard] },
   { path: '**', redirectTo: '' }   // wildcard must always be LAST
 ];
