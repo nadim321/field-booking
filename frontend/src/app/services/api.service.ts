@@ -37,6 +37,10 @@ export class ApiService {
     );
   }
 
+  getDemoAdminLoginConfig(): Observable<{ enabled: boolean; credentials: { username: string; password: string } | null }> {
+    return this.http.get<{ enabled: boolean; credentials: { username: string; password: string } | null }>(`${this.apiUrl}/auth/demo-login-config`);
+  }
+
   logout(): void {
     localStorage.removeItem('admin_token');
     this.tokenSubject.next(null);
@@ -80,7 +84,7 @@ export class ApiService {
     // Simple JWT expiration check
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      const isExpired = typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp || payload.role !== 'admin';
+      const isExpired = typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp || !['admin', 'demo_admin'].includes(payload.role);
       if (isExpired) {
         this.logout();
         return false;
@@ -89,6 +93,13 @@ export class ApiService {
     } catch (e) {
       return false;
     }
+  }
+
+  isDemoAdmin(): boolean {
+    const token = this.token;
+    if (!token) return false;
+    try { return JSON.parse(atob(token.split('.')[1])).role === 'demo_admin'; }
+    catch { return false; }
   }
 
   private getAuthHeaders(): HttpHeaders {

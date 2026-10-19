@@ -14,7 +14,7 @@ import { DialogDirective } from '../../directives/dialog.directive';
   templateUrl: './admin-calendar.component.html', styleUrl: './admin-calendar.component.css'
 })
 export class AdminCalendarComponent implements OnInit, OnDestroy {
-  private api = inject(ApiService);
+  readonly api = inject(ApiService);
   private router = inject(Router);
   private requests = new Subject<void>();
   private subscription = new Subscription();

@@ -68,7 +68,7 @@
         <p *ngIf="!slot.is_active" class="note">This slot configuration is inactive.</p>
         <p *ngIf="cell.conflict" class="error">A staff block overlaps an existing booking. Review both records in Bookings and Bulk Blocking.</p>
         <dl *ngIf="cell.booking as booking">
-          <dt>Payments</dt><dd><button class="payment-action" (click)="openPayments(booking.id)"><span aria-hidden="true">৳</span> Receive Payment / History</button></dd>
+          <dt *ngIf="!api.isDemoAdmin()">Payments</dt><dd *ngIf="!api.isDemoAdmin()"><button class="payment-action" (click)="openPayments(booking.id)"><span aria-hidden="true">৳</span> Receive Payment / History</button></dd>
           <dt>Booking</dt><dd>#{{ booking.id }} · {{ booking.status }}</dd>
           <dt>Customer</dt><dd>{{ booking.customer_name }}</dd><dt>Phone</dt><dd>{{ booking.customer_phone }}</dd>
           <ng-container *ngIf="booking.team_name"><dt>Team</dt><dd>{{ booking.team_name }}</dd></ng-container>

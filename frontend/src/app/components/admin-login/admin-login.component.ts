@@ -21,11 +21,26 @@ export class AdminLoginComponent implements OnInit {
   password = '';
   loading = false;
   errorMsg = '';
+  demoLoginEnabled = false;
+  configLoading = false;
 
   ngOnInit(): void {
     if (this.apiService.isLoggedIn()) {
       this.router.navigate(['/admin/dashboard']);
+      return;
     }
+    this.configLoading = true;
+    this.apiService.getDemoAdminLoginConfig().subscribe({
+      next: config => {
+        this.demoLoginEnabled = config.enabled === true;
+        if (config.enabled && config.credentials) {
+          this.username = config.credentials.username;
+          this.password = config.credentials.password;
+        }
+        this.configLoading = false;
+      },
+      error: () => { this.configLoading = false; }
+    });
   }
 
   onSubmit(): void {

@@ -2,7 +2,12 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { ApiService } from '../services/api.service';
 
-export const adminGuard: CanActivateFn = () => {
+export const adminGuard: CanActivateFn = (_route, state) => {
   const api = inject(ApiService);
-  return api.isLoggedIn() || inject(Router).createUrlTree(['/admin/login']);
+  const router = inject(Router);
+  if (!api.isLoggedIn()) return router.createUrlTree(['/admin/login']);
+  if (api.isDemoAdmin() && /\/(field-configuration|slot-setup)(?:\?.*)?$/.test(state.url)) {
+    return router.createUrlTree(['/admin/dashboard']);
+  }
+  return true;
 };

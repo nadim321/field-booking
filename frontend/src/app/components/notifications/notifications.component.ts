@@ -7,7 +7,7 @@ import { NotificationDetail, NotificationEvent, NotificationPage, NotificationSt
 
 @Component({ selector:'app-notifications', standalone:true, imports:[CommonModule,FormsModule], templateUrl:'./notifications.component.html', styleUrl:'./notifications.component.css' })
 export class NotificationsComponent implements OnInit, OnDestroy {
-  private api=inject(ApiService);
+  readonly api=inject(ApiService);
   data: NotificationPage | null=null;
   detail: NotificationDetail | null=null;
   bookingId: number | null=null;

@@ -12,6 +12,7 @@
     "migrate": "node scripts/migrate.js",
     "migrate:check": "node scripts/migrate.js --check",
     "seed:dev": "node scripts/seed.js",
+    "seed:demo": "node scripts/seed-demo.js",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js",
     "import:mysql-to-postgres": "node scripts/import-mysql-to-postgres.js",

@@ -2,6 +2,15 @@ const db = require('../database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { jwtSecret: JWT_SECRET } = require('../config/env');
+const { demoAdminLoginEnabled, DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD } = require('../services/auth/demo-admin');
+
+exports.demoLoginConfig = (req, res) => {
+  const enabled = demoAdminLoginEnabled();
+  res.set('Cache-Control', 'no-store').json({
+    enabled,
+    credentials: enabled ? { username: DEMO_ADMIN_USERNAME, password: DEMO_ADMIN_PASSWORD } : null
+  });
+};
 
 exports.login = (req, res) => {
   const { username, password } = req.body;
@@ -15,7 +24,7 @@ exports.login = (req, res) => {
       return res.fail(err);
     }
 
-    if (!user) {
+    if (!user || (user.role !== 'admin' && !(user.role === 'demo_admin' && demoAdminLoginEnabled()))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 

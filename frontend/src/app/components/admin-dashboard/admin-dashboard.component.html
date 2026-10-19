@@ -20,9 +20,9 @@
       </button>
       <a routerLink="/admin/dashboard/collections" [class.active]="activeTab === 'collections'" [attr.aria-current]="activeTab === 'collections' ? 'page' : null" class="menu-item"><span class="menu-icon">৳</span> Collections</a>
       <a routerLink="/admin/dashboard/notifications" [class.active]="activeTab === 'notifications'" [attr.aria-current]="activeTab === 'notifications' ? 'page' : null" class="menu-item"><span class="menu-icon">✉</span> Notifications</a>
-      <a routerLink="/admin/dashboard/field-configuration" [class.active]="activeTab === 'field'" [attr.aria-current]="activeTab === 'field' ? 'page' : null" class="menu-item"><span class="menu-icon">🏟️</span> Field Configuration</a>
-      <a routerLink="/admin/dashboard/slot-setup" [class.active]="activeTab === 'slots'" [attr.aria-current]="activeTab === 'slots' ? 'page' : null" class="menu-item"><span class="menu-icon">⚙️</span> Slot Setup</a>
-      <button (click)="navigateTab('blocking')" [class.active]="activeTab === 'blocking'" class="menu-item">
+      <a *ngIf="!demoReadOnly" routerLink="/admin/dashboard/field-configuration" [class.active]="activeTab === 'field'" [attr.aria-current]="activeTab === 'field' ? 'page' : null" class="menu-item"><span class="menu-icon">🏟️</span> Field Configuration</a>
+      <a *ngIf="!demoReadOnly" routerLink="/admin/dashboard/slot-setup" [class.active]="activeTab === 'slots'" [attr.aria-current]="activeTab === 'slots' ? 'page' : null" class="menu-item"><span class="menu-icon">⚙️</span> Slot Setup</a>
+      <button *ngIf="!demoReadOnly" (click)="navigateTab('blocking')" [class.active]="activeTab === 'blocking'" class="menu-item">
         <span class="menu-icon">🚫</span> Bulk Blocking
       </button>
     </nav>
@@ -46,6 +46,7 @@
         <a routerLink="/" target="_blank" class="btn btn-secondary btn-sm">View Public Site &rarr;</a>
       </div>
     </header>
+    <p *ngIf="demoReadOnly" class="demo-readonly-banner" role="status">Demo account · read-only · synthetic data</p>
 
     <!-- Content Body -->
     <main class="content-body">
@@ -228,11 +229,11 @@
                       Refund due: ৳{{ booking.refund_amount | number:'1.2-2' }}<br />
                       Returned: ৳{{ booking.refunded_amount | number:'1.2-2' }}
                       <span *ngIf="booking.refund_payout_status">Automatic refund: {{ booking.refund_payout_status.replace('_', ' ') }}</span>
-                      <button *ngIf="(booking.refund_amount || 0) > (booking.refunded_amount || 0) && !['pending','retrying','initiating','submitted'].includes(booking.refund_payout_status || '')" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
+                      <button *ngIf="!demoReadOnly && (booking.refund_amount || 0) > (booking.refunded_amount || 0) && !['pending','retrying','initiating','submitted'].includes(booking.refund_payout_status || '')" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
                     </div>
                   </td>
                   <td>
-                    <div class="action-buttons">
+                    <div class="action-buttons" *ngIf="!demoReadOnly">
                       <!-- Approve Option -->
                       <button *ngIf="booking.status === 'pending'" (click)="updateBookingStatus(booking.id, 'approved')"
                         title="Approve Booking" class="btn-action btn-act-approve">✔</button>
@@ -284,7 +285,7 @@
               class="btn-filter">Expired</button>
           </div>
 
-          <button (click)="runRecurringGenerationNow()" class="btn btn-secondary btn-sm" [disabled]="recurringLoading">
+          <button *ngIf="!demoReadOnly" (click)="runRecurringGenerationNow()" class="btn btn-secondary btn-sm" [disabled]="recurringLoading">
             ⚡ Run Generation Now
           </button>
         </div>
@@ -331,7 +332,7 @@
                     </span>
                   </td>
                   <td>
-                    <div class="action-buttons">
+                    <div class="action-buttons" *ngIf="!demoReadOnly">
                       <!-- Approve (pending_approval -> active) -->
                       <button *ngIf="rb.status === 'pending_approval'" (click)="approveRecurringBooking(rb.id)"
                         title="Approve Season Booking" class="btn-action btn-act-approve">✔</button>
@@ -369,7 +370,7 @@
       <section *ngIf="activeTab === 'blocking'" class="tab-content fade-in">
 
         <!-- Action Card -->
-        <div class="panel-card" style="margin-bottom: 2rem;">
+        <div *ngIf="!demoReadOnly" class="panel-card" style="margin-bottom: 2rem;">
           <div class="panel-header">
             <h3>🚫 Bulk Slot Blocking</h3>
           </div>

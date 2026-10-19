@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../config/env');
+const { demoAdminLoginEnabled } = require('../services/auth/demo-admin');
 
 module.exports = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -20,7 +21,12 @@ module.exports = (req, res, next) => {
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
 
-    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+    if (decoded.role === 'demo_admin') {
+      if (!demoAdminLoginEnabled()) return res.status(403).json({ message: 'Demo admin access is disabled' });
+      if (!['GET', 'HEAD'].includes(req.method)) return res.status(403).json({ message: 'Demo admin access is read-only' });
+    } else if (decoded.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
     req.user = decoded;
     next();
   });

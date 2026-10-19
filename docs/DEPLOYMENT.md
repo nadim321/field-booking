@@ -59,6 +59,10 @@ To test MySQL logic, set `RUN_DB_TESTS=1` and run `npm run test:integration --pr
 
 For a new environment, run `npm run admin:create` with `ADMIN_USERNAME` and `ADMIN_PASSWORD` supplied through the process environment/secret manager. Password length must be at least 12; existing accounts are never overwritten. Configure slots and turf settings through the admin UI. `npm run seed:dev` optionally inserts demo slots/settings and an admin only when `SEED_ADMIN_PASSWORD` is provided; it refuses `NODE_ENV=production`.
 
+### Isolated hosted demo admin
+
+Run a separate backend service with its own empty demo database; never point the demo service at production data. Set `DEMO_ADMIN_LOGIN_ENABLED=true` only on that service, then run `npm run seed:demo --prefix backend` once to create the read-only `admin` / `admin123` account and synthetic booking examples. The admin login page autofills these credentials while demo mode is enabled. Demo admin tokens can only use read-only admin GET endpoints; write requests are rejected. Keep `DEMO_ADMIN_LOGIN_ENABLED=false` on every production service, use sandbox payment credentials (`SSLCOMMERZ_IS_LIVE=false`), and disable background scheduler/refund/notification workers unless the demo configuration specifically needs them.
+
 ## Monitoring
 
 Collect process stdout/stderr with the host supervisor. Filter structured JSON records by `level=error` and correlate requests using `X-Request-ID`. Request logs omit bodies, query strings and authorization headers; keep log access restricted because older notification adapters still log delivery details. Monitor 5xx rate, readiness failures and unexpected process exits in the hosting provider's existing alert system.

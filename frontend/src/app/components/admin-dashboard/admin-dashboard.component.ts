@@ -69,6 +69,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 })
 export class AdminDashboardComponent implements OnInit {
   private apiService = inject(ApiService);
+  get demoReadOnly(): boolean { return this.apiService.isDemoAdmin(); }
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private destroyRef = inject(DestroyRef);
@@ -88,7 +89,8 @@ export class AdminDashboardComponent implements OnInit {
   private syncPage(): void {
     const child = this.route.firstChild?.snapshot.routeConfig?.path;
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    this.activeTab = child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(tab || '') ? tab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
+    const safeTab = this.demoReadOnly && tab === 'blocking' ? 'calendar' : tab;
+    this.activeTab = child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(safeTab || '') ? safeTab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
     if (this.activeTab === 'blocking') { this.loadSlots(); this.selectedSlotIdsForBlock.clear(); this.loadBlockPreview(); }
   }
 

@@ -7,7 +7,7 @@ import {CollectionHistory} from '../../services/collections';
 import {DialogDirective} from '../../directives/dialog.directive';
 @Component({selector:'app-payment-dialog',standalone:true,imports:[CommonModule,FormsModule,DialogDirective],templateUrl:'./payment-dialog.component.html',styleUrl:'./collections.component.css'})
 export class PaymentDialogComponent implements OnInit,OnDestroy {
-  private api=inject(ApiService);private requests=new Subscription();private read?:Subscription;
+  readonly api=inject(ApiService);private requests=new Subscription();private read?:Subscription;
   @Input({required:true}) bookingId!:number;
   @Output() closed=new EventEmitter<void>();@Output() changed=new EventEmitter<void>();
   data:CollectionHistory|null=null;loading=false;busy=false;error='';notice='';amount='';method='cash';reference='';note='';reason='';reversing:number|null=null;

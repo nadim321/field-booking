@@ -1160,3 +1160,4 @@
 .cancellation-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:20px; }
 
 .sidebar-menu a.menu-item { text-decoration: none; box-sizing: border-box; }
+.demo-readonly-banner { margin: 0 1.5rem 1rem; padding: .7rem 1rem; border: 1px solid #b8d7c4; border-radius: .6rem; background: #edf8f0; color: #245c39; font-weight: 600; }
