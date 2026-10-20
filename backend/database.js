@@ -7,10 +7,11 @@ const db = {
   cancellationReady: false,
   initialize({ migrate = true } = {}) {
     if (initialization) return initialization;
+    const connectionLimit = Number(process.env.DB_POOL_MAX || 10);
     pool = database.driver === 'postgres'
-      ? postgres.createPool(database)
+      ? postgres.createPool({ ...database, max: connectionLimit })
       : mysql.createPool({ host: database.host, port: database.port, user: database.user, password: database.password,
-        database: database.database, waitForConnections: true, connectionLimit: 10, queueLimit: 100, connectTimeout: 10000 });
+        database: database.database, waitForConnections: true, connectionLimit, queueLimit: 100, connectTimeout: 10000 });
     initialization = (async () => {
       const migrations = require('./migrations/runner');
       if (migrate) await migrations.run(pool);

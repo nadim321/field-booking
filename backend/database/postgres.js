@@ -123,7 +123,7 @@ function createPool(config) {
   const poolConfig = config.connectionString
     ? { connectionString: config.connectionString }
     : { host: config.host, port: config.port, user: config.user, password: config.password, database: config.database };
-  const pool = new Pool({ ...poolConfig, max: 10, connectionTimeoutMillis: 10000, ssl: config.ssl ? { rejectUnauthorized: false } : undefined });
+  const pool = new Pool({ ...poolConfig, max: config.max || 10, connectionTimeoutMillis: 10000, ssl: config.ssl ? { rejectUnauthorized: false } : undefined });
   return {
     promise() { return this; },
     getConnection(callback) {
