@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 (async () => {
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
-  if (!username || username.length > 255 || !password || password.length < 12) throw new Error('Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 12 characters) in the process environment');
+  if (!username || username.length > 255 || !password || password.length < 8) throw new Error('Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 8 characters) in the process environment');
   try {
     await db.initialize({ migrate: false });
     const c = await db.promiseConnection();
