@@ -21,8 +21,8 @@ const SLOTS = [
 (async () => {
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
-  if (!username || !password || password.length < 12) {
-    throw new Error('Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 12 characters)');
+  if (!username || !password || password.length < 8) {
+    throw new Error('Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 8 characters)');
   }
   await db.initialize({ migrate: false });
   const c = await db.promiseConnection();
