@@ -37,6 +37,10 @@ export class ApiService {
     );
   }
 
+  changeAdminPassword(credentials: { currentPassword: string; newPassword: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/auth/change-password`, credentials, { headers: this.getAuthHeaders() });
+  }
+
   getDemoAdminLoginConfig(): Observable<{ enabled: boolean; credentials: { username: string; password: string } | null }> {
     return this.http.get<{ enabled: boolean; credentials: { username: string; password: string } | null }>(`${this.apiUrl}/auth/demo-login-config`);
   }

@@ -45,10 +45,7 @@ const SLOTS = [
       await c.query("INSERT INTO users (username,password,role) VALUES (?,?,'admin')", [username, await bcrypt.hash(password, 12)]);
       console.log(`Admin '${username}' created`);
     } else {
-      await c.query(
-          "UPDATE users SET password = ? WHERE username = ? AND role = 'admin'",
-          [await bcrypt.hash(password, 12), username]
-      );
+      console.log(`Admin '${username}' already exists, skipped`);
     }
     await c.commit();
     console.log('Setup complete');

@@ -75,13 +75,13 @@ export class AdminDashboardComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   // Tabs navigation
-  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'field' | 'notifications' | 'collections' | 'blocking' = 'calendar';
+  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'field' | 'notifications' | 'collections' | 'blocking' | 'security' = 'calendar';
 
   get pageTitle(): string {
-    return this.activeTab === 'collections' ? 'Collections' : this.activeTab === 'notifications' ? 'Notifications' : this.activeTab === 'field' ? 'Field Configuration' : this.activeTab === 'slots' ? 'Slot Setup' : 'Admin Control Panel';
+    return this.activeTab === 'collections' ? 'Collections' : this.activeTab === 'notifications' ? 'Notifications' : this.activeTab === 'field' ? 'Field Configuration' : this.activeTab === 'slots' ? 'Slot Setup' : this.activeTab === 'security' ? 'Change Password' : 'Admin Control Panel';
   }
   get pageDescription(): string {
-    return this.activeTab === 'collections' ? 'Record receipts, review corrections and reconcile daily collections.' : this.activeTab === 'notifications' ? 'Track mock SMS notifications, reminders and retry attempts.' : this.activeTab === 'field' ? 'Manage your venue branding, photos, facilities and contact information.' : this.activeTab === 'slots' ? 'Manage slot times, prices, availability and advance payments.' : 'Manage bookings, configure turf slots, and analyze revenue.';
+    return this.activeTab === 'collections' ? 'Record receipts, review corrections and reconcile daily collections.' : this.activeTab === 'notifications' ? 'Track mock SMS notifications, reminders and retry attempts.' : this.activeTab === 'field' ? 'Manage your venue branding, photos, facilities and contact information.' : this.activeTab === 'slots' ? 'Manage slot times, prices, availability and advance payments.' : this.activeTab === 'security' ? 'Update your admin account password.' : 'Manage bookings, configure turf slots, and analyze revenue.';
   }
   navigateTab(tab: 'calendar' | 'overview' | 'bookings' | 'season' | 'blocking'): void {
     this.router.navigate(['/admin/dashboard'], { queryParams: tab === 'calendar' ? {} : { tab } });
@@ -90,7 +90,7 @@ export class AdminDashboardComponent implements OnInit {
     const child = this.route.firstChild?.snapshot.routeConfig?.path;
     const tab = this.route.snapshot.queryParamMap.get('tab');
     const safeTab = this.demoReadOnly && tab === 'blocking' ? 'calendar' : tab;
-    this.activeTab = child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(safeTab || '') ? safeTab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
+    this.activeTab = child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'change-password' ? 'security' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(safeTab || '') ? safeTab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
     if (this.activeTab === 'blocking') { this.loadSlots(); this.selectedSlotIdsForBlock.clear(); this.loadBlockPreview(); }
   }
 

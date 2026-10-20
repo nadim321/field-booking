@@ -23,8 +23,10 @@ export class AdminLoginComponent implements OnInit {
   errorMsg = '';
   demoLoginEnabled = false;
   configLoading = false;
+  successMsg = '';
 
   ngOnInit(): void {
+    if (history.state?.passwordChanged) this.successMsg = 'Password changed. Sign in with your new password.';
     if (this.apiService.isLoggedIn()) {
       this.router.navigate(['/admin/dashboard']);
       return;

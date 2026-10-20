@@ -18,6 +18,8 @@
 
       <p *ngIf="demoLoginEnabled" class="demo-mode-note" role="status">Demo account · read-only view · synthetic data</p>
 
+      <div *ngIf="successMsg" class="alert-success" role="status">{{ successMsg }}</div>
+
       <div *ngIf="errorMsg" class="alert-error">
         <span class="alert-icon">⚠️</span>
         <span class="alert-text">{{ errorMsg }}</span>

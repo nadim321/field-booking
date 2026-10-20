@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const db = require('../database');
 const { jwtSecret } = require('../config/env');
 const { demoAdminLoginEnabled } = require('../services/auth/demo-admin');
 
@@ -27,7 +28,14 @@ module.exports = (req, res, next) => {
     } else if (decoded.role !== 'admin') {
       return res.status(403).json({ message: 'Admin access required' });
     }
-    req.user = decoded;
-    next();
+    db.get('SELECT auth_version FROM users WHERE id=?', [decoded.id], (lookupError, user) => {
+      if (lookupError) return res.fail(lookupError);
+      const tokenVersion = Number.isInteger(decoded.auth_version) ? decoded.auth_version : 0;
+      if (!user || tokenVersion !== Number(user.auth_version)) {
+        return res.status(401).json({ code: 'ADMIN_SESSION_REVOKED', message: 'Admin session was revoked. Please sign in again.' });
+      }
+      req.user = decoded;
+      next();
+    });
   });
 };
