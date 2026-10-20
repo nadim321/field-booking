@@ -9,6 +9,7 @@ module.exports = app => {
   app.use(require('./bookings.routes'));
   app.use(require('./recurring.routes'));
   app.use(require('./admin-bookings.routes'));
+  app.use(require('./admins.routes'));
   app.use(require('./slots.routes'));
   app.use(require('./slot-blocks.routes'));
   app.use(require('./stats.routes'));

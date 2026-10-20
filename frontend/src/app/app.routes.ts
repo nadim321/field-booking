@@ -15,6 +15,7 @@ export const routes: Routes = [
     { path: 'collections', canActivate: [adminGuard], loadComponent: () => import('./components/collections/collections.component').then(m => m.CollectionsComponent) },
     { path: 'notifications', canActivate: [adminGuard], loadComponent: () => import('./components/notifications/notifications.component').then(m => m.NotificationsComponent) },
     { path: 'change-password', canActivate: [adminGuard], loadComponent: () => import('./components/admin-password-change/admin-password-change.component').then(m => m.AdminPasswordChangeComponent) },
+    { path: 'admins', canActivate: [adminGuard], loadComponent: () => import('./components/admin-management/admin-management.component').then(m => m.AdminManagementComponent) },
     { path: 'field-configuration', canActivate: [adminGuard], loadComponent: () => import('./components/venue/venue-settings.component').then(m => m.VenueSettingsComponent) },
     { path: 'slot-setup', canActivate: [adminGuard], loadComponent: () => import('./components/slot-setup/slot-setup.component').then(m => m.SlotSetupComponent) }
   ] },

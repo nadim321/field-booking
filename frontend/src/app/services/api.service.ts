@@ -41,6 +41,22 @@ export class ApiService {
     return this.http.post<{ message: string }>(`${this.apiUrl}/auth/change-password`, credentials, { headers: this.getAuthHeaders() });
   }
 
+  getAdmins(): Observable<{ id: number; username: string }[]> {
+    return this.http.get<{ id: number; username: string }[]>(`${this.apiUrl}/admin/admins`, { headers: this.getAuthHeaders() });
+  }
+
+  createAdmin(account: { username: string; password: string }): Observable<{ id: number; username: string }> {
+    return this.http.post<{ id: number; username: string }>(`${this.apiUrl}/admin/admins`, account, { headers: this.getAuthHeaders() });
+  }
+
+  updateAdmin(id: number, account: { username: string; password?: string }): Observable<{ id: number; username: string; reauthentication_required: boolean }> {
+    return this.http.patch<{ id: number; username: string; reauthentication_required: boolean }>(`${this.apiUrl}/admin/admins/${id}`, account, { headers: this.getAuthHeaders() });
+  }
+
+  deleteAdmin(id: number): Observable<{ deleted_id: number }> {
+    return this.http.delete<{ deleted_id: number }>(`${this.apiUrl}/admin/admins/${id}`, { headers: this.getAuthHeaders() });
+  }
+
   getDemoAdminLoginConfig(): Observable<{ enabled: boolean; credentials: { username: string; password: string } | null }> {
     return this.http.get<{ enabled: boolean; credentials: { username: string; password: string } | null }>(`${this.apiUrl}/auth/demo-login-config`);
   }

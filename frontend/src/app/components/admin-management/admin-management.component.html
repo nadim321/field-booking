@@ -1,0 +1,54 @@
+<section class="admin-management" aria-labelledby="admins-title">
+  <div class="toolbar">
+    <div>
+      <h2 id="admins-title">Admin accounts</h2>
+      <p>Manage accounts that can access the admin dashboard.</p>
+    </div>
+    <button type="button" class="primary" (click)="openCreate()" [disabled]="formOpen">Add admin</button>
+  </div>
+
+  <p *ngIf="notice" class="notice" role="status">{{ notice }}</p>
+  <p *ngIf="error" class="error" role="alert">{{ error }}</p>
+
+  <form *ngIf="formOpen" class="account-form" (ngSubmit)="submit()" #accountForm="ngForm">
+    <h3>{{ editingId === null ? 'Add admin' : 'Edit admin' }}</h3>
+    <label for="admin-username">Username</label>
+    <input id="admin-username" name="username" [(ngModel)]="username" required maxlength="255" autocomplete="off" [disabled]="saving" />
+
+    <label for="admin-password">{{ editingId === null ? 'Password' : 'Set a new password (optional)' }}</label>
+    <input id="admin-password" name="password" type="password" [(ngModel)]="password"
+      [required]="editingId === null" minlength="8" autocomplete="new-password" [disabled]="saving" />
+
+    <ng-container *ngIf="editingId === null || password">
+      <label for="admin-confirm-password">Confirm password</label>
+      <input id="admin-confirm-password" name="confirmPassword" type="password" [(ngModel)]="confirmPassword"
+        [required]="editingId === null || !!password" autocomplete="new-password" [disabled]="saving" />
+      <p *ngIf="confirmPassword && !passwordsMatch" class="field-error" role="alert">Passwords do not match.</p>
+    </ng-container>
+    <p *ngIf="password && password.length > 0 && password.length < 8" class="field-error" role="alert">Password must be at least 8 characters.</p>
+
+    <div class="form-actions">
+      <button type="submit" class="primary" [disabled]="accountForm.invalid || saving || !passwordValid || !passwordsMatch">
+        {{ saving ? 'Saving…' : (editingId === null ? 'Create admin' : 'Save changes') }}
+      </button>
+      <button type="button" (click)="closeForm()" [disabled]="saving">Cancel</button>
+    </div>
+  </form>
+
+  <p *ngIf="loading" role="status">Loading admin accounts…</p>
+  <div class="table-wrap" *ngIf="!loading && admins.length">
+    <table>
+      <thead><tr><th>Username</th><th>Actions</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let admin of admins">
+          <td>{{ admin.username }} <span *ngIf="admin.id === currentAdminId" class="you-label">(you)</span></td>
+          <td class="actions">
+            <button type="button" (click)="openEdit(admin)" [disabled]="formOpen">Edit</button>
+            <button type="button" class="danger" (click)="remove(admin)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p *ngIf="!loading && !admins.length" class="empty">No admin accounts found.</p>
+</section>
