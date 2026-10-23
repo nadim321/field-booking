@@ -42,8 +42,8 @@ async function start() {
   });
   return server;
 }
-if (require.main === module) start().catch(async error => {
-  logger.error('startup_failed', { error_type: error.name, code: error.code || 'CONFIG_OR_MIGRATION' });
+const launchedByLiteSpeed = require.main && /lsnode\.js$/.test(require.main.filename);
+if (require.main === module || launchedByLiteSpeed) start().catch(async error => {  logger.error('startup_failed', { error_type: error.name, code: error.code || 'CONFIG_OR_MIGRATION' });
   sentry.captureException(error, { stage: 'startup' });
   await db.close();
   await sentry.flush();

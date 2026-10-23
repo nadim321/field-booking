@@ -1,7 +1,7 @@
 const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
-const port = Number(process.env.PORT || 5000);
-const { release } = require('./release');
+const rawPort = process.env.PORT || 5000;
+const port = /^\d+$/.test(String(rawPort)) ? Number(rawPort) : rawPort;const { release } = require('./release');
 const requestedDriver = (process.env.DB_DRIVER || 'mysql').toLowerCase();
 const databaseDriver = ({ pg: 'postgres', pgsql: 'postgres', postgresql: 'postgres' })[requestedDriver] || requestedDriver;
 module.exports = {
