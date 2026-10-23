@@ -7,13 +7,14 @@ import { Observable, BehaviorSubject, Subject, tap } from 'rxjs';
 import { CalendarResponse } from './calendar';
 import { AdminStats } from './admin-stats';
 import { resolveApiBaseUrl } from './api-base-url';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ApiService {
   private http = inject(HttpClient);
-  private apiUrl = resolveApiBaseUrl(window.location.hostname, window.__BOOKING_RUNTIME_CONFIG__?.apiBaseUrl);
+  private apiUrl = resolveApiBaseUrl(environment.apiBaseUrl);
 
   readonly settingsChanges = new Subject<void>();
 

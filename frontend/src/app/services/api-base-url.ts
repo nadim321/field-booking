@@ -1,6 +1,17 @@
-export function resolveApiBaseUrl(hostname: string, configuredUrl?: string): string {
-  if (hostname === 'localhost') return 'http://localhost:5000/api';
-  if (hostname === '127.0.0.1' || hostname.endsWith('.localhost')) return '/api';
-  const configured = configuredUrl?.trim().replace(/\/+$/, '');
-  return configured || 'https://field-booking-back.onrender.com/api';
+export function resolveApiBaseUrl(configuredUrl: string): string {
+  const configured = configuredUrl.trim().replace(/\/+$/, '');
+  if (!configured) throw new Error('apiBaseUrl must be configured in the Angular environment.');
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new Error('apiBaseUrl must be an absolute HTTP(S) URL.');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('apiBaseUrl must be an absolute HTTP(S) URL without credentials, query, or hash.');
+  }
+
+  return configured;
 }

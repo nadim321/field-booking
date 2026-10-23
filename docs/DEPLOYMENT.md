@@ -14,6 +14,10 @@ The backend now resolves `.env` relative to its own directory, so commands work 
 
 ## Verify and package
 
+### Static frontend on cPanel
+
+Set the production API address in `frontend/src/environments/environment.production.ts` (`apiBaseUrl`). A static cPanel site cannot read a server environment variable in the browser, so changing a cPanel environment setting will not change this value. Build the production frontend with `npm run build --prefix frontend`, then upload the **contents** of `frontend/dist/frontend/browser/` to the cPanel document root (commonly `public_html`). Rebuild and upload again whenever the API address changes. Local development uses `frontend/src/environments/environment.ts`.
+
 ```bash
 npm ci --prefix backend
 npm ci --prefix frontend
