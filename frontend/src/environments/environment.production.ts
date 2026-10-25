@@ -1,3 +1,3 @@
 export const environment = {
-  apiBaseUrl: 'https://field-booking-back.onrender.com/api'
+  apiBaseUrl: '/api'
 } as const;
