@@ -16,7 +16,15 @@ The backend now resolves `.env` relative to its own directory, so commands work 
 
 ### Frontend deployment options
 
-For a single public URL, keep `apiBaseUrl` set to `/api` in `frontend/src/environments/environment.production.ts`, build a release with `npm run release --prefix backend`, and run the extracted Node app. The release bundles Angular into `backend/public`; Express serves the app and API from the same origin. Point the domain to this Node app and upload neither a separate frontend build nor a separate frontend service.
+#### cPanel: frontend and API on one domain
+
+This option requires cPanel **Setup Node.js App** (Passenger/LiteSpeed) and MySQL support. Use Node.js 22 or 24. Keep `apiBaseUrl` set to `/api` in `frontend/src/environments/environment.production.ts`; the release bundles Angular into `backend/public`, and Express serves both the website and API from the Node app.
+
+1. Create the production database and database user in cPanel. Grant the user the privileges needed to create/alter tables for migrations and the normal application database access. Keep the database name, user and password for the app configuration.
+2. On your development machine, run `npm ci --prefix backend`, `npm ci --prefix frontend`, then `npm run release --prefix backend`. Upload the resulting `artifacts/booking-*.zip` to your account and extract it. The app root is the ZIP's `backend` directory.
+3. In **Setup Node.js App**, create an application using Node.js 22 or 24, production mode and the extracted `backend` directory as its application root. Set `server.js` as the startup file. Map the app to the domain you want customers to use and configure HTTPS for that domain. Do not create a separate static frontend deployment.
+4. Install production dependencies from the app root with `npm ci --omit=dev` in cPanel Terminal/SSH, or use the Node app page's dependency installation action. Configure the private application environment there (or in a private `.env` in the app root): `NODE_ENV=production`, database settings, a `JWT_SECRET` of at least 32 characters, `PUBLIC_SITE_URL=https://your-domain`, `PAYMENT_PUBLIC_BASE_URL=https://your-domain`, and `MEDIA_DIR` as an absolute writable directory outside the extracted release. Set `SCHEDULER_ENABLED=true` on only one running app process. Leave the port to cPanel's Node app manager; it supplies `PORT`.
+5. Restart the application through cPanel. Startup applies pending migrations by default. Check `https://your-domain/health/ready`, then test the website, admin login, booking flow and payment gateway in sandbox mode. SSLCommerz callback URLs are generated from `PAYMENT_PUBLIC_BASE_URL` under `/api/payments/`.
 
 For a separately hosted static frontend on cPanel, set `apiBaseUrl` to the full API address in `frontend/src/environments/environment.production.ts`. A static site cannot read a server environment variable in the browser. Build with `npm run build --prefix frontend`, then upload the **contents** of `frontend/dist/frontend/browser/` to the cPanel document root (commonly `public_html`). Rebuild and upload again whenever the API address changes. Local development uses `frontend/src/environments/environment.ts`.
 
