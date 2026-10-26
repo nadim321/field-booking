@@ -1,19 +1,24 @@
 <section class="admin-management" aria-labelledby="admins-title">
   <div class="toolbar">
     <div>
-      <h2 id="admins-title">Admin accounts</h2>
-      <p>Manage accounts that can access the admin dashboard.</p>
+      <h2 id="admins-title">Team access</h2>
+      <p>Assign owner, manager, or staff access for the turf dashboard.</p>
     </div>
-    <button type="button" class="primary" (click)="openCreate()" [disabled]="formOpen">Add admin</button>
+    <button type="button" class="primary" (click)="openCreate()" [disabled]="formOpen">Add team member</button>
   </div>
 
   <p *ngIf="notice" class="notice" role="status">{{ notice }}</p>
   <p *ngIf="error" class="error" role="alert">{{ error }}</p>
 
   <form *ngIf="formOpen" class="account-form" (ngSubmit)="submit()" #accountForm="ngForm">
-    <h3>{{ editingId === null ? 'Add admin' : 'Edit admin' }}</h3>
+    <h3>{{ editingId === null ? 'Add team member' : 'Edit team member' }}</h3>
     <label for="admin-username">Username</label>
     <input id="admin-username" name="username" [(ngModel)]="username" required maxlength="255" autocomplete="off" [disabled]="saving" />
+
+    <label for="admin-role">Role</label>
+    <select id="admin-role" name="role" [(ngModel)]="role" [disabled]="saving">
+      <option value="owner">Owner</option><option value="manager">Manager</option><option value="staff">Staff</option>
+    </select>
 
     <label for="admin-password">{{ editingId === null ? 'Password' : 'Set a new password (optional)' }}</label>
     <input id="admin-password" name="password" type="password" [(ngModel)]="password"
@@ -29,7 +34,7 @@
 
     <div class="form-actions">
       <button type="submit" class="primary" [disabled]="accountForm.invalid || saving || !passwordValid || !passwordsMatch">
-        {{ saving ? 'Saving…' : (editingId === null ? 'Create admin' : 'Save changes') }}
+        {{ saving ? 'Saving…' : (editingId === null ? 'Create account' : 'Save changes') }}
       </button>
       <button type="button" (click)="closeForm()" [disabled]="saving">Cancel</button>
     </div>
@@ -41,7 +46,7 @@
       <thead><tr><th>Username</th><th>Actions</th></tr></thead>
       <tbody>
         <tr *ngFor="let admin of admins">
-          <td>{{ admin.username }} <span *ngIf="admin.id === currentAdminId" class="you-label">(you)</span></td>
+          <td>{{ admin.username }} <span class="you-label">· {{ admin.role }}</span><span *ngIf="admin.id === currentAdminId" class="you-label"> (you)</span></td>
           <td class="actions">
             <button type="button" (click)="openEdit(admin)" [disabled]="formOpen">Edit</button>
             <button type="button" class="danger" (click)="remove(admin)">Delete</button>

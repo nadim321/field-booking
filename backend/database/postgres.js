@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 const ID_TABLES = new Set([
   'users', 'slots', 'slot_holds', 'recurring_bookings', 'bookings', 'payment_transactions',
   'slot_blocks', 'refund_settlements', 'notification_jobs', 'notification_attempts', 'booking_collections',
-  'customers', 'customer_otp_challenges', 'refund_payouts'
+  'customers', 'customer_otp_challenges', 'refund_payouts', 'venue_expenses', 'customer_cancellation_requests', 'admin_audit_log'
 ]);
 
 function placeholders(sql, values) {

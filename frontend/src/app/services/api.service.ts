@@ -42,20 +42,45 @@ export class ApiService {
     return this.http.post<{ message: string }>(`${this.apiUrl}/auth/change-password`, credentials, { headers: this.getAuthHeaders() });
   }
 
-  getAdmins(): Observable<{ id: number; username: string }[]> {
-    return this.http.get<{ id: number; username: string }[]>(`${this.apiUrl}/admin/admins`, { headers: this.getAuthHeaders() });
+  getAdmins(): Observable<{ id: number; username: string; role: string }[]> {
+    return this.http.get<{ id: number; username: string; role: string }[]>(`${this.apiUrl}/admin/admins`, { headers: this.getAuthHeaders() });
   }
 
-  createAdmin(account: { username: string; password: string }): Observable<{ id: number; username: string }> {
-    return this.http.post<{ id: number; username: string }>(`${this.apiUrl}/admin/admins`, account, { headers: this.getAuthHeaders() });
+  createAdmin(account: { username: string; password: string; role: string }): Observable<{ id: number; username: string; role: string }> {
+    return this.http.post<{ id: number; username: string; role: string }>(`${this.apiUrl}/admin/admins`, account, { headers: this.getAuthHeaders() });
   }
 
-  updateAdmin(id: number, account: { username: string; password?: string }): Observable<{ id: number; username: string; reauthentication_required: boolean }> {
-    return this.http.patch<{ id: number; username: string; reauthentication_required: boolean }>(`${this.apiUrl}/admin/admins/${id}`, account, { headers: this.getAuthHeaders() });
+  updateAdmin(id: number, account: { username: string; password?: string; role?: string }): Observable<{ id: number; username: string; role: string; reauthentication_required: boolean }> {
+    return this.http.patch<{ id: number; username: string; role: string; reauthentication_required: boolean }>(`${this.apiUrl}/admin/admins/${id}`, account, { headers: this.getAuthHeaders() });
   }
 
   deleteAdmin(id: number): Observable<{ deleted_id: number }> {
     return this.http.delete<{ deleted_id: number }>(`${this.apiUrl}/admin/admins/${id}`, { headers: this.getAuthHeaders() });
+  }
+
+  getOperations(start: string, end: string): Observable<any> {
+    const params = new URLSearchParams({ start, end });
+    return this.http.get<any>(`${this.apiUrl}/admin/expenses?${params}`, { headers: this.getAuthHeaders() });
+  }
+
+  createExpense(expense: { expense_date: string; category: string; amount: string; method: string; reference?: string; note?: string }): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${this.apiUrl}/admin/expenses`, expense, { headers: this.getAuthHeaders() });
+  }
+
+  voidExpense(id: number, reason: string): Observable<{ id: number; status: string }> {
+    return this.http.post<{ id: number; status: string }>(`${this.apiUrl}/admin/expenses/${id}/void`, { reason }, { headers: this.getAuthHeaders() });
+  }
+
+  getAuditLog(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/admin/audit-log`, { headers: this.getAuthHeaders() });
+  }
+
+  getCancellationRequests(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/admin/cancellation-requests`, { headers: this.getAuthHeaders() });
+  }
+
+  reviewCancellationRequest(id: number, decision: 'approve' | 'reject', note = ''): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/admin/cancellation-requests/${id}/review`, { decision, note }, { headers: this.getAuthHeaders() });
   }
 
   getDemoAdminLoginConfig(): Observable<{ enabled: boolean; credentials: { username: string; password: string } | null }> {
@@ -98,6 +123,10 @@ export class ApiService {
     return this.http.get<any>(`${this.apiUrl}/customer/bookings`, { headers: new HttpHeaders({ Authorization: `Bearer ${this.customerToken || ''}` }) });
   }
 
+  requestBookingCancellation(id: number, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/customer/bookings/${id}/cancellation-request`, { reason }, { headers: new HttpHeaders({ Authorization: `Bearer ${this.customerToken || ''}` }) });
+  }
+
   isLoggedIn(): boolean {
     const token = this.token;
     if (!token) return false;
@@ -105,7 +134,7 @@ export class ApiService {
     // Simple JWT expiration check
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      const isExpired = typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp || !['admin', 'demo_admin'].includes(payload.role);
+      const isExpired = typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp || !['admin', 'owner', 'manager', 'staff', 'demo_admin'].includes(payload.role);
       if (isExpired) {
         this.logout();
         return false;
@@ -121,6 +150,11 @@ export class ApiService {
     if (!token) return false;
     try { return JSON.parse(atob(token.split('.')[1])).role === 'demo_admin'; }
     catch { return false; }
+  }
+
+  adminRole(): string {
+    try { return this.token ? JSON.parse(atob(this.token.split('.')[1])).role : ''; }
+    catch { return ''; }
   }
 
   private getAuthHeaders(): HttpHeaders {

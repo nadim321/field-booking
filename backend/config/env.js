@@ -13,6 +13,7 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'turf_booking_super_secret_key_123!@#',
   paymentPublicBaseUrl: process.env.PAYMENT_PUBLIC_BASE_URL || `http://localhost:${port}`,
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || '').trim().replace(/\/$/, ''),
+  bookingSmsProvider: (process.env.BOOKING_SMS_PROVIDER || 'mock').toLowerCase(),
   database: {
     driver: databaseDriver,
     host: process.env.DB_HOST || 'localhost',
@@ -31,6 +32,12 @@ module.exports = {
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be a valid TCP port');
     if (!['mysql', 'postgres'].includes(this.database.driver)) throw new Error('DB_DRIVER must be mysql or postgres');
+    if (!['mock', 'json'].includes(this.bookingSmsProvider)) throw new Error('BOOKING_SMS_PROVIDER must be mock or json');
+    if (this.bookingSmsProvider === 'json') {
+      let endpoint;
+      try { endpoint = new URL(process.env.SMS_API_URL || ''); } catch { throw new Error('SMS_API_URL must be an absolute HTTPS URL when booking SMS relay is enabled'); }
+      if (endpoint.protocol !== 'https:' || !process.env.SMS_API_KEY) throw new Error('Booking SMS relay requires HTTPS SMS_API_URL and SMS_API_KEY');
+    }
     if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) throw new Error('Production JWT_SECRET must contain at least 32 characters');
     if (process.env.NODE_ENV === 'production') {
       let site;

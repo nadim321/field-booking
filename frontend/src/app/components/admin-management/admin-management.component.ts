@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 
-interface AdminAccount { id: number; username: string; }
+interface AdminAccount { id: number; username: string; role: string; }
 
 @Component({
   selector: 'app-admin-management',
@@ -27,6 +27,7 @@ export class AdminManagementComponent implements OnInit {
   username = '';
   password = '';
   confirmPassword = '';
+  role = 'staff';
 
   ngOnInit(): void { this.load(); }
 
@@ -64,6 +65,7 @@ export class AdminManagementComponent implements OnInit {
     this.resetForm();
     this.editingId = admin.id;
     this.username = admin.username;
+    this.role = admin.role === 'admin' ? 'owner' : admin.role;
     this.formOpen = true;
   }
 
@@ -75,7 +77,7 @@ export class AdminManagementComponent implements OnInit {
     this.error = '';
     this.notice = '';
     if (this.editingId === null) {
-      this.api.createAdmin({ username: this.username.trim(), password: this.password }).subscribe({
+      this.api.createAdmin({ username: this.username.trim(), password: this.password, role: this.role }).subscribe({
         next: () => { this.saving = false; this.notice = 'Admin account created.'; this.resetForm(); this.load(); },
         error: err => { this.saving = false; this.error = err.error?.message || 'Admin account could not be created.'; }
       });
@@ -83,7 +85,7 @@ export class AdminManagementComponent implements OnInit {
     }
 
     const id = this.editingId;
-    const update = { username: this.username.trim(), ...(this.password ? { password: this.password } : {}) };
+    const update = { username: this.username.trim(), role: this.role, ...(this.password ? { password: this.password } : {}) };
     this.api.updateAdmin(id, update).subscribe({
       next: result => {
         this.saving = false;
@@ -124,5 +126,6 @@ export class AdminManagementComponent implements OnInit {
     this.username = '';
     this.password = '';
     this.confirmPassword = '';
+    this.role = 'staff';
   }
 }

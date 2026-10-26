@@ -18,6 +18,7 @@ function createApp({ publicPath = path.join(__dirname, 'public'), frontendUrl = 
   app.use(requestLog);
   app.use(cors());
   app.use(express.json({ limit: '100kb' }));
+  app.use(require('./middleware/admin-audit'));
   app.get('/runtime-config.js', (req, res) => {
     res.set({ 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
     res.send(serializeRuntimeConfig({ sentryDsn: config.sentryFrontendDsn, release: config.release, environment: config.sentryEnvironment }));

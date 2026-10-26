@@ -1,0 +1,40 @@
+<section class="operations">
+  <p *ngIf="notice" class="notice" role="status">{{notice}}</p><p *ngIf="error" class="error" role="alert">{{error}}</p>
+  <section class="panel">
+    <h2>Daily collections minus expenses</h2>
+    <p class="muted">Recorded cash and gateway collections minus active recorded expenses. This is not profit and does not include refunds.</p>
+    <div class="filters"><label>From <input type="date" [(ngModel)]="start"></label><label>To <input type="date" [(ngModel)]="end"></label><button type="button" (click)="load()">Show report</button></div>
+    <p *ngIf="loading" role="status">Loading report…</p>
+    <div class="table-wrap" *ngIf="!loading"><table><thead><tr><th>Date</th><th>Collected</th><th>Expenses</th><th>After expenses</th></tr></thead><tbody><tr *ngFor="let row of data.days"><td>{{row.date}}</td><td>৳{{row.collected | number:'1.2-2'}}</td><td>৳{{row.expenses | number:'1.2-2'}}</td><td>৳{{row.net_after_expenses | number:'1.2-2'}}</td></tr><tr *ngIf="!data.days.length"><td colspan="4">No activity for this date range.</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <h2>Record an expense</h2>
+    <form class="expense-form" (ngSubmit)="addExpense()">
+      <label>Date <input type="date" name="expenseDate" [(ngModel)]="expenseDate" required></label>
+      <label>Category <input name="category" [(ngModel)]="category" maxlength="80" placeholder="Maintenance, utilities…" required></label>
+      <label>Amount (৳) <input name="amount" [(ngModel)]="amount" type="number" min="0.01" step="0.01" required></label>
+      <label>Paid by <select name="method" [(ngModel)]="method"><option value="cash">Cash</option><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="bank_transfer">Bank transfer</option></select></label>
+      <label>Reference <input name="reference" [(ngModel)]="reference" maxlength="150"></label>
+      <label>Note <input name="note" [(ngModel)]="note" maxlength="500"></label>
+      <button type="submit" [disabled]="saving || !category.trim() || !amount">{{saving ? 'Saving…' : 'Record expense'}}</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Expense entries</h2>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Method</th><th>Recorded by</th><th>Status</th><th></th></tr></thead><tbody>
+      <tr *ngFor="let expense of data.expenses"><td>{{expense.expense_date}}</td><td>{{expense.category}}<small *ngIf="expense.note">{{expense.note}}</small><small *ngIf="expense.void_reason">Void reason: {{expense.void_reason}}</small></td><td>৳{{expense.amount | number:'1.2-2'}}</td><td>{{expense.method}}</td><td>{{expense.actor_name}}</td><td>{{expense.status}}</td><td><button *ngIf="expense.status === 'active'" type="button" class="quiet" (click)="voidExpense(expense)">Void</button></td></tr>
+      <tr *ngIf="!data.expenses.length"><td colspan="7">No expenses recorded.</td></tr>
+    </tbody></table></div>
+  </section>
+  <section class="panel">
+    <h2>Customer cancellation requests</h2>
+    <div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
+      <tr *ngFor="let request of cancellationRequests"><td>#{{request.booking_id}} · {{request.booking_date}} · {{request.start_time}}–{{request.end_time}}</td><td>{{request.customer_name}}<small>{{request.customer_phone}}</small></td><td>{{request.reason}}<small *ngIf="request.review_note">Review note: {{request.review_note}}</small></td><td>{{request.status}}</td><td *ngIf="request.status === 'pending' || request.status === 'reviewing'"><button type="button" (click)="reviewCancellation(request,'approve')">{{request.status === 'reviewing' ? 'Continue approval' : 'Approve'}}</button><button *ngIf="request.status === 'pending'" class="quiet" type="button" (click)="reviewCancellation(request,'reject')">Reject</button></td></tr>
+      <tr *ngIf="!cancellationRequests.length"><td colspan="5">No cancellation requests.</td></tr>
+    </tbody></table></div>
+  </section>
+  <section class="panel">
+    <h2>Recent administrator activity</h2>
+    <div class="table-wrap"><table><thead><tr><th>Time</th><th>Account</th><th>Action</th><th>Area</th><th>Record</th><th>Result</th></tr></thead><tbody><tr *ngFor="let item of audit"><td>{{item.created_at | date:'medium'}}</td><td>{{item.actor_name}}</td><td>{{item.http_method}}</td><td>{{item.resource}}</td><td>{{item.resource_id || '—'}}</td><td>{{item.response_status}}</td></tr><tr *ngIf="!audit.length"><td colspan="6">No administrator changes recorded yet.</td></tr></tbody></table></div>
+  </section>
+</section>

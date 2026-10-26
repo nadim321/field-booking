@@ -56,7 +56,11 @@ GitHub Actions runs backend syntax, policy/workflow/HTTP/gateway/observability t
 
 Production builds disable build-time remote font inlining; runtime font styling retains the existing browser fallback. Release packaging copies an allowlist of runtime files and the new Angular build into an archive, excluding private `.env`, dependencies and data. See [deployment and backup procedures](docs/DEPLOYMENT.md).
 
-Customer OTP verification and automatic gateway refund transfers remain unimplemented. Existing public result/PDF/payment endpoints should receive a separate customer-authorization review before exposing additional personal data.
+Customer phone OTP verification is available and rate-limited. Automatic gateway refund transfers remain provider-dependent; the app records and queues supported payouts. Existing public result/PDF/payment endpoints should receive a separate customer-authorization review before exposing additional personal data.
+
+Admin users can be owners, managers or staff; legacy `admin` accounts retain owner access. The authorization middleware applies role-specific write permissions. Successful admin mutations record method, route template, actor and status in `admin_audit_log` without storing request bodies. `venue_expenses` is a reasoned-void ledger; the operations report compares collected receipts with active expenses and does not label the result profit. Customers can submit cancellation requests for their own future bookings; an owner or manager reviews and approves/rejects them through the existing cancellation workflow.
+
+Booking SMS remains mock by default. `BOOKING_SMS_PROVIDER=json` opts into the HTTPS relay contract documented in [notification operations](docs/NOTIFICATIONS.md). Provider acceptance is tracked separately from mock simulation; delivery receipts are not ingested.
 
 The booking result view derives payment messages from a server summary of verified transactions, not redirect query parameters. It distinguishes staff approval from online payment, polls boundedly for delayed callbacks, and restores the last booking ID on a same-tab refresh. Dialogs trap focus, restore it on close, and protect an in-progress submission/navigation from accidental dismissal. Migration 003 introduces attempt metadata; staff use `npm run payment:reconcile -- --transaction ID` for uncertain attempts. See the deployment guide for response states and recovery.
 ## Booking price snapshots

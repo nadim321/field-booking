@@ -24,7 +24,7 @@ exports.login = (req, res) => {
       return res.fail(err);
     }
 
-    if (!user || (user.role !== 'admin' && !(user.role === 'demo_admin' && demoAdminLoginEnabled()))) {
+    if (!user || (!['admin', 'owner', 'manager', 'staff'].includes(user.role) && !(user.role === 'demo_admin' && demoAdminLoginEnabled()))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -48,7 +48,7 @@ exports.login = (req, res) => {
 };
 
 exports.changePassword = async (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (req.user.role === 'demo_admin') {
     return res.status(403).json({ message: 'Demo admin accounts cannot change passwords' });
   }
 
@@ -65,7 +65,7 @@ exports.changePassword = async (req, res) => {
 
   const connection = await db.promiseConnection();
   try {
-    const [rows] = await connection.query('SELECT password,auth_version FROM users WHERE id=? AND role=\'admin\'', [req.user.id]);
+    const [rows] = await connection.query("SELECT password,auth_version FROM users WHERE id=? AND role IN ('admin','owner','manager','staff')", [req.user.id]);
     const user = rows[0];
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
       return res.status(400).json({ message: 'Current password is incorrect' });

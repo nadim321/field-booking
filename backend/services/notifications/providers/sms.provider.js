@@ -88,10 +88,23 @@ class OtpSmsProvider {
   }
 }
 
+/** Optional booking SMS relay. It uses the same HTTPS JSON relay contract as OTP.
+ * A 2xx response means the relay accepted the message, not that the handset received it. */
+class JsonSmsProvider extends OtpSmsProvider {
+  async send(input) {
+    if (!this.apiUrl || !this.apiKey) return { success: false, error: 'Booking SMS relay is not configured' };
+    return super.send(input);
+  }
+}
+
+const bookingProvider = process.env.BOOKING_SMS_PROVIDER === 'json' ? new JsonSmsProvider() : new MockSmsProvider();
+
 module.exports = {
   MockSmsProvider,
   BulkSmsBdProvider,
   OtpSmsProvider,
+  JsonSmsProvider,
+  bookingProvider,
   otpProvider: new OtpSmsProvider(),
   // Legacy, non-outbox notifications also remain simulated.
   activeProvider: new MockSmsProvider()

@@ -1,17 +1,17 @@
 const {randomUUID}=require('node:crypto');
 const outbox=require('./outbox.service');
-const {MockSmsProvider}=require('./providers/sms.provider');
+const {bookingProvider}=require('./providers/sms.provider');
 const logger=require('../../utils/logger');
 const delays=[60000,300000,900000];
 const LEASE_MS=60000;
 const SEND_TIMEOUT_MS=10000;
-const defaultProvider=new MockSmsProvider(); // Deliberately cannot select a real gateway through env.
+const defaultProvider=bookingProvider;
 
 async function finish(job,outcome,now,error=null) {
   await outbox.transaction(async c=>{
     const [[current]]=await c.query('SELECT * FROM notification_jobs WHERE id=? FOR UPDATE',[job.id]);
     if (!current || current.status!=='processing' || current.lease_token!==job.lease_token) return;
-    const status=outcome==='simulated'?'simulated':current.cycle_attempts>=4?'failed':'retrying';
+    const status=outcome==='simulated'?'simulated':outcome==='sent'?'sent':current.cycle_attempts>=4?'failed':'retrying';
     await c.query('UPDATE notification_jobs SET status=?,next_attempt_at=?,lease_token=NULL,lease_until=NULL,last_error=?,updated_at=? WHERE id=?',
       [status,now+(delays[current.cycle_attempts-1] || 0),error,now,job.id]);
     await c.query('UPDATE notification_attempts SET outcome=?,finished_at=?,error_code=? WHERE job_id=? AND lease_token=? AND outcome=\'processing\'',
@@ -52,8 +52,9 @@ async function processClaim(job,provider,now) {
   try {
     const result=await Promise.race([provider.send({to:job.recipient,message:job.message,idempotencyKey:String(job.id)}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),SEND_TIMEOUT_MS);})]);
     const simulated=result?.success===true && result?.providerResponse?.mock===true;
-    await finish(job,simulated?'simulated':'failed',now(),simulated?null:'MOCK_SEND_FAILED');
-  } catch { await finish(job,'failed',now(),'MOCK_SEND_FAILED_OR_TIMEOUT'); }
+    const sent=result?.success===true && !simulated;
+    await finish(job,simulated?'simulated':sent?'sent':'failed',now(),simulated||sent?null:'SMS_PROVIDER_REJECTED');
+  } catch { await finish(job,'failed',now(),'SMS_PROVIDER_FAILED_OR_TIMEOUT'); }
   finally {clearTimeout(timer);}
 }
 async function runOnce({provider=defaultProvider,now=()=>Date.now()}={}) {

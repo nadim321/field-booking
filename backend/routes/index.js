@@ -1,6 +1,7 @@
 module.exports = app => {
   app.use(require('./calendar.routes'));
   app.use(require('./collections.routes'));
+  app.use(require('./operations.routes'));
   app.use(require('./notifications.routes'));
   app.use(require('./settings.routes'));
   app.use(require('./media.routes'));

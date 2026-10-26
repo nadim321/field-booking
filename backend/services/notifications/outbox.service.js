@@ -1,7 +1,7 @@
 const db = require('../../database');
 const HOUR = 3600000;
 const EVENTS = ['booking_created','booking_confirmed','booking_cancelled','reminder'];
-const STATUSES = ['queued','processing','retrying','simulated','failed','skipped'];
+const STATUSES = ['queued','processing','retrying','simulated','sent','failed','skipped'];
 const failure = (message, status = 409) => Object.assign(new Error(message), { status });
 function kickoff(b) {
   if (!b || !/^\d{4}-\d{2}-\d{2}$/.test(b.booking_date) || !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(b.start_time)) return null;
@@ -94,7 +94,7 @@ function manualReason(job,b,now) {
   const start=kickoff(b);
   if(start===null) return 'INVALID_KICKOFF';
   if(start<=now) return 'KICKOFF_PASSED';
-  if(!['queued','retrying','failed','simulated'].includes(job.status)) return 'NOT_SENDABLE';
+  if(!['queued','retrying','failed','simulated','sent'].includes(job.status)) return 'NOT_SENDABLE';
   return null;
 }
 async function resend(id,actor,key,now=Date.now()) {
@@ -117,7 +117,7 @@ async function resend(id,actor,key,now=Date.now()) {
     const body=await message(c,b,job.event);
     let target=id;
     // Future automatic reminders retain their schedule; completed jobs retain history.
-    const separate=job.status==='simulated' || (job.event==='reminder' && !job.source_job_id && kickoff(b)-2*HOUR>now);
+    const separate=['simulated','sent'].includes(job.status) || (job.event==='reminder' && !job.source_job_id && kickoff(b)-2*HOUR>now);
     if(separate) {
       const [insert]=await c.query(`INSERT INTO notification_jobs
         (booking_id,event,version,recipient,message,status,scheduled_at,next_attempt_at,kickoff_at,created_at,updated_at,dispatch_key,source_job_id,requested_by)

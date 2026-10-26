@@ -1,4 +1,4 @@
-export type NotificationStatus = 'queued' | 'processing' | 'retrying' | 'simulated' | 'failed' | 'skipped';
+export type NotificationStatus = 'queued' | 'processing' | 'retrying' | 'simulated' | 'sent' | 'failed' | 'skipped';
 export type NotificationEvent = 'booking_created' | 'booking_confirmed' | 'booking_cancelled' | 'reminder';
 export interface NotificationJob {
   id: number; booking_id: number; event: NotificationEvent; status: NotificationStatus; recipient: string;

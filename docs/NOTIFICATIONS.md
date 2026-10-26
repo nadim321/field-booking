@@ -1,8 +1,10 @@
-# Booking notifications (mock SMS)
+# Booking notifications (mock by default; optional JSON relay)
 
-The booking SMS worker always uses the mock provider. It makes no SMS network
-requests. `Simulated — no SMS sent` is a successful simulation, never proof of
-customer delivery. Existing email behavior is unchanged and is not tracked here.
+Booking SMS uses the mock provider by default. `Simulated — no SMS sent` is a
+successful simulation, never proof of customer delivery. An optional HTTPS JSON
+relay can be enabled explicitly; `Accepted by SMS provider` means the relay
+returned a successful response, not that the handset received the message.
+Existing email behavior is unchanged and is not tracked here.
 
 ## Events and persistence
 
@@ -42,8 +44,9 @@ ID; old attempts remain available. Concurrent retry requests cannot start duplic
 cycles. Claims have a 60-second lease and provider calls a 10-second timeout.
 Expired claims are recorded as interrupted and follow the same retry limit.
 Database leases prevent concurrent workers from claiming the same active job.
-This does not provide exactly-once external delivery after a process crash: a
-future real gateway must support idempotency and delivery receipts.
+This does not provide exactly-once external delivery after a process crash: the
+configured relay must honor idempotency keys to avoid duplicate sends. Delivery
+receipts are not currently ingested.
 
 ## Deployment and operations
 
@@ -62,9 +65,14 @@ future real gateway must support idempotency and delivery receipts.
    be processed again, so pause the worker during restore verification.
 
 Job timestamps are UTC epoch milliseconds; the admin UI displays Asia/Dhaka time.
-Do not enable a real gateway by changing credentials or swapping an export. The
-worker is deliberately pinned to mock until delivery/idempotency handling and
-provider-specific tests are implemented. No real SMS provider has been selected.
+To opt into a compatible relay, set `BOOKING_SMS_PROVIDER=json` and configure
+`SMS_API_URL`, `SMS_API_KEY`, and optional `SMS_SENDER_ID`. The URL must use HTTPS.
+The worker POSTs JSON `{to,message,sender_id,idempotency_key}`, sends the same key
+as `Idempotency-Key`, and authenticates with a Bearer token. The relay must accept
+this contract and deduplicate repeated keys. A non-2xx response or timeout is
+retried by the existing worker. Validate the relay in staging before enabling it
+in production. The app does not process delivery receipts or confirm handset
+delivery. OTP can use the same compatible relay independently.
 
 ## Verification
 
@@ -87,7 +95,7 @@ and durable request receipts. Apply it through the migration runner before using
 this version. Existing automatic jobs retain their identity and event deduplication.
 
 Admin → Notifications now offers **Send now** for relevant queued/retrying/failed
-jobs and **Resend** for completed simulations. The request queues work for the next
+jobs and **Resend** for completed simulations or provider acceptances. The request queues work for the next
 worker cycle (normally within one minute); it does not send SMS synchronously.
 Processing, skipped, removed or superseded notifications cannot be resent. All
 manual sends, including booking requests and cancellations, require a valid current
@@ -116,5 +124,5 @@ Manual requests are audited with administrator, time and message. Concurrent
 requests for the same booking are serialized; a pending manual send prevents
 additional sends for the same original notification. Backups and restores must
 include `notification_resend_requests` along with jobs and attempt history so
-request deduplication survives restart/restore. The mock-only delivery policy and
-1/5/15-minute retry delays remain unchanged.
+request deduplication survives restart/restore. The mock default and 1/5/15-minute
+retry delays remain unchanged.
