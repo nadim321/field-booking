@@ -1,0 +1,75 @@
+<section class="closing">
+  <p *ngIf="notice" class="notice" role="status">{{notice}}</p>
+  <p *ngIf="error" class="error" role="alert">{{error}}</p>
+
+  <section class="panel">
+    <h2>Close the day</h2>
+    <p class="muted">Matches the cash you counted with what the booking ledger says should be in the drawer. Dates use Asia/Dhaka time.</p>
+    <div class="filters">
+      <button type="button" class="quiet" (click)="shiftDay(-1)" aria-label="Previous day">‹</button>
+      <label>Date <input type="date" name="date" [(ngModel)]="date" [max]="maxDate" (change)="load()"></label>
+      <button type="button" class="quiet" (click)="shiftDay(1)" [disabled]="date >= maxDate" aria-label="Next day">›</button>
+    </div>
+    <p *ngIf="loading" role="status">Loading…</p>
+
+    <ng-container *ngIf="summary as s">
+      <p *ngIf="s.closing" class="badge ok" data-testid="closing-status">Closed by {{s.closing.actor_name}} · counted ৳{{s.closing.counted_cash | number:'1.2-2'}} · difference ৳{{s.closing.variance | number:'1.2-2'}}<span *ngIf="s.closing_revisions > 1"> · revision {{s.closing_revisions}}</span></p>
+      <p *ngIf="!s.closing" class="badge">Not closed yet</p>
+
+      <div class="cards">
+        <div><span>Cash collected</span><strong>৳{{s.collections.cash_net | number:'1.2-2'}}</strong></div>
+        <div><span>Online / transfer</span><strong>৳{{s.collections.online_net | number:'1.2-2'}}</strong></div>
+        <div><span>Cash expenses</span><strong>৳{{s.expenses.cash | number:'1.2-2'}}</strong></div>
+        <div><span>Cash expected</span><strong data-testid="expected-cash">৳{{expected | number:'1.2-2'}}</strong></div>
+      </div>
+
+      <div class="table-wrap"><table><thead><tr><th>Method</th><th>Received</th><th>Corrections</th><th>Net</th></tr></thead><tbody>
+        <tr *ngFor="let row of s.collections.by_method"><td>{{methodLabel(row.method)}}</td><td>৳{{row.gross | number:'1.2-2'}}</td><td>৳{{row.corrections | number:'1.2-2'}}</td><td>৳{{row.net | number:'1.2-2'}}</td></tr>
+        <tr *ngIf="!s.collections.by_method.length"><td colspan="4">No collections recorded this day.</td></tr>
+      </tbody></table></div>
+
+      <p *ngIf="s.completed_refunds.count" class="warn">{{s.completed_refunds.count}} refund(s) worth ৳{{s.completed_refunds.amount | number:'1.2-2'}} were recorded as completed today. The app does not know whether they were paid in cash, so enter any cash you paid out below.</p>
+
+      <div *ngIf="!s.ledger_check.ok" class="error" role="alert" data-testid="ledger-mismatch">
+        <strong>Ledger does not match for {{s.ledger_check.mismatches.length}} booking(s).</strong> Fix these before closing:
+        <ul><li *ngFor="let m of s.ledger_check.mismatches">Booking #{{m.booking_id}}: ledger ৳{{m.ledger_total | number:'1.2-2'}} vs booking paid ৳{{m.amount_paid | number:'1.2-2'}}</li></ul>
+      </div>
+      <p *ngIf="s.ledger_check.ok" class="muted">Ledger check passed for {{s.ledger_check.bookings_checked}} booking(s) with activity this day.</p>
+
+      <form class="close-form" (ngSubmit)="submit()">
+        <label>Cash counted (৳) <input name="counted" type="number" inputmode="decimal" min="0" step="0.01" [(ngModel)]="countedCash" required></label>
+        <label>Cash refunds paid out (৳) <input name="refunds" type="number" inputmode="decimal" min="0" step="0.01" [(ngModel)]="cashRefundsPaid"></label>
+        <label class="wide">{{closed ? 'Reason for correcting this closing' : 'Note' + (needsNote ? ' (required for a difference)' : ' (optional)')}} <input name="note" [(ngModel)]="note" maxlength="500"></label>
+        <p class="difference" *ngIf="variance !== null" [class.bad]="variance !== 0" data-testid="variance">{{variance === 0 ? 'Cash matches.' : (variance! > 0 ? 'Over by ৳' : 'Short by ৳') + (variance! < 0 ? -variance! : variance!) }}</p>
+        <button type="submit" [disabled]="!canSubmit">{{saving ? 'Saving…' : closed ? 'Save correction' : 'Close day'}}</button>
+      </form>
+    </ng-container>
+  </section>
+
+  <section class="panel">
+    <h2>Recent closings</h2>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Expected</th><th>Counted</th><th>Difference</th><th>By</th><th>Status</th><th>Note</th></tr></thead><tbody>
+      <tr *ngFor="let row of history"><td>{{row.close_date}}</td><td>৳{{row.expected_cash | number:'1.2-2'}}</td><td>৳{{row.counted_cash | number:'1.2-2'}}</td><td [class.bad-text]="row.variance !== 0">৳{{row.variance | number:'1.2-2'}}</td><td>{{row.actor_name}}</td><td>{{row.status}}</td><td><small>{{row.note}}</small></td></tr>
+      <tr *ngIf="!history.length"><td colspan="7">No days closed in the last 30 days.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>SMS usage and estimated cost</h2>
+    <div class="filters"><label>From <input type="date" name="usageStart" [(ngModel)]="usageStart"></label><label>To <input type="date" name="usageEnd" [(ngModel)]="usageEnd"></label><button type="button" (click)="loadUsage()">Show</button></div>
+    <p *ngIf="usageError" class="error" role="alert">{{usageError}}</p>
+    <ng-container *ngIf="usage as u">
+      <div class="cards">
+        <div><span>Messages</span><strong>{{u.totals.messages}}</strong></div>
+        <div><span>Billable parts</span><strong>{{u.totals.billable_units}}</strong></div>
+        <div><span>Delivered (receipt)</span><strong>{{u.totals.delivered}}</strong></div>
+        <div><span>Estimated cost</span><strong *ngIf="u.unit_cost_configured">৳{{u.totals.estimated_cost | number:'1.2-2'}}</strong><strong *ngIf="!u.unit_cost_configured">Not set</strong></div>
+      </div>
+      <p class="muted">{{u.note}}<span *ngIf="!u.unit_cost_configured"> Set SMS_UNIT_COST_BDT on the server to see an estimate.</span></p>
+      <div class="table-wrap"><table><thead><tr><th>Purpose</th><th>Provider</th><th>Result</th><th>Delivery</th><th>Messages</th><th>Parts</th></tr></thead><tbody>
+        <tr *ngFor="let row of u.rows"><td>{{row.purpose === 'otp' ? 'Login code (OTP)' : 'Booking message'}}</td><td>{{row.provider}}</td><td>{{row.status === 'accepted' ? 'Accepted by provider' : row.status === 'simulated' ? 'Simulated (no SMS)' : 'Failed'}}</td><td>{{row.status === 'accepted' ? deliveryLabel(row.delivery_status) : '—'}}</td><td>{{row.messages}}</td><td>{{row.units}}</td></tr>
+        <tr *ngIf="!u.rows.length"><td colspan="6">No SMS activity in this range.</td></tr>
+      </tbody></table></div>
+    </ng-container>
+  </section>
+</section>

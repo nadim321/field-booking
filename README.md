@@ -25,6 +25,7 @@ npm test --prefix backend
 npm test --prefix frontend -- --watch=false --browsers=ChromeHeadless
 npm run build --prefix frontend
 npm run test:e2e --prefix frontend
+npm run test:e2e:mobile --prefix frontend   # phone-width staff screens, mocked API, needs `npm run build` first
 npm run release --prefix backend
 ```
 

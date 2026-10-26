@@ -1,0 +1,11 @@
+:host{display:block;min-width:0}.closing{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;color:#e2e8f0}.panel{min-width:0;padding:1rem;border:1px solid #334155;border-radius:12px;background:#1e293b}.panel h2{margin:.1rem 0 .7rem;color:#f8fafc}.muted,small{display:block;color:#94a3b8}
+.filters,.close-form{display:flex;flex-wrap:wrap;align-items:end;gap:.7rem;margin:.8rem 0}.filters label,.close-form label{display:grid;gap:.3rem;color:#cbd5e1}
+input{min-width:130px;padding:.55rem;border:1px solid #64748b;border-radius:6px;background:#0f172a;color:#f8fafc;font:inherit}
+.close-form .wide{flex:1 1 260px}.close-form .wide input{width:100%;box-sizing:border-box}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem;margin:.8rem 0}.cards div{padding:.8rem;border:1px solid #334155;border-radius:10px;background:#0f172a}.cards span{display:block;color:#94a3b8;font-size:.85rem}.cards strong{font-size:1.25rem;color:#f8fafc}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:.65rem;border-bottom:1px solid #334155;white-space:nowrap}td small{white-space:normal;max-width:240px}
+button{padding:.6rem .9rem;border:1px solid #059669;border-radius:7px;background:#047857;color:#fff;font:inherit;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}.quiet{border-color:#64748b;background:#334155}
+.notice,.error,.warn{padding:.7rem;border-radius:7px}.notice{background:#064e3b;color:#a7f3d0}.error{background:#7f1d1d;color:#fecaca}.error ul{margin:.4rem 0 0 1.1rem;padding:0}.warn{background:#78350f;color:#fde68a}
+.badge{display:inline-block;margin:.2rem 0;padding:.35rem .7rem;border-radius:999px;background:#334155;color:#e2e8f0}.badge.ok{background:#064e3b;color:#a7f3d0}
+.difference{flex:1 0 100%;margin:0;color:#a7f3d0;font-weight:600}.difference.bad,.bad-text{color:#fca5a5}
+@media(max-width:650px){.panel{padding:.75rem}.filters{align-items:stretch}.filters label{flex:1}.close-form{display:grid;grid-template-columns:1fr 1fr}.close-form label{min-width:0}.close-form .wide{grid-column:1/-1}input{box-sizing:border-box;width:100%;min-width:0}.close-form button{grid-column:1/-1;min-height:44px}th,td{padding:.5rem;font-size:.88rem}}

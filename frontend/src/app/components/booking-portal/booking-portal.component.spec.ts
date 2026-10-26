@@ -1,15 +1,15 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
-import { NEVER, of, throwError } from 'rxjs';
+import { NEVER, Subject, of, throwError } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { BookingPortalComponent } from './booking-portal.component';
 
 describe('booking result verification lifecycle', () => {
   let component: BookingPortalComponent;
-  let api: { getBookingResult: jasmine.Spy; getAvailableSlots: jasmine.Spy; getPublicSettings: jasmine.Spy; initiatePayment: jasmine.Spy };
+  let api: { getBookingResult: jasmine.Spy; getAvailableSlots: jasmine.Spy; getPublicSettings: jasmine.Spy; initiatePayment: jasmine.Spy; settingsChanges: Subject<void> };
   beforeEach(() => {
     sessionStorage.clear();
-    api = { getBookingResult: jasmine.createSpy().and.returnValue(throwError(() => new Error('offline'))), getAvailableSlots: jasmine.createSpy().and.returnValue(of({ slots: [] })), getPublicSettings: jasmine.createSpy().and.returnValue(of({})), initiatePayment: jasmine.createSpy().and.returnValue(NEVER) };
+    api = { getBookingResult: jasmine.createSpy().and.returnValue(throwError(() => new Error('offline'))), getAvailableSlots: jasmine.createSpy().and.returnValue(of({ slots: [] })), getPublicSettings: jasmine.createSpy().and.returnValue(of({})), initiatePayment: jasmine.createSpy().and.returnValue(NEVER), settingsChanges: new Subject<void>() };
     TestBed.configureTestingModule({ providers: [
       { provide: ApiService, useValue: api },
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ payment: 'success', booking_id: '1' }) } } },

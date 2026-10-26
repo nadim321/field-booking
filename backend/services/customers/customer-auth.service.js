@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../../database');
 const { jwtSecret } = require('../../config/env');
 const { otpProvider } = require('../notifications/providers/sms.provider');
+const smsUsage = require('../notifications/sms-usage.service');
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const PHONE_WINDOW_MS = 15 * 60 * 1000;
@@ -61,13 +62,15 @@ async function requestOtp(inputPhone, ip, { provider = otpProvider, now = Date.n
         expires_at: new Date(now + OTP_TTL_MS).toISOString()
       }));
     }
+    const otpMessage = `Your Kickoff Arena verification code is ${code}. It expires in 5 minutes.`;
     let result;
     try {
-      result = await provider.send({ to: phone, message: `Your Kickoff Arena verification code is ${code}. It expires in 5 minutes.`, idempotencyKey: `otp-${challengeId}` });
+      result = await provider.send({ to: phone, message: otpMessage, idempotencyKey: `otp-${challengeId}` });
     } catch (error) {
       if (!logOtp) throw error;
       result = { success: false };
     }
+    await smsUsage.record({ purpose: 'otp', provider: provider.providerName || 'unknown', result, message: otpMessage, now });
     if (!result?.success && !logOtp) {
       await connection.query('UPDATE customer_otp_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?', [challengeId]);
       throw failure('Could not send the verification code. Try again later.', 503);

@@ -71,6 +71,22 @@ export class ApiService {
     return this.http.post<{ id: number; status: string }>(`${this.apiUrl}/admin/expenses/${id}/void`, { reason }, { headers: this.getAuthHeaders() });
   }
 
+  getDailySummary(date: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/admin/daily-summary?${new URLSearchParams({ date })}`, { headers: this.getAuthHeaders() });
+  }
+
+  getDailyClosings(start: string, end: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/admin/daily-closings?${new URLSearchParams({ start, end })}`, { headers: this.getAuthHeaders() });
+  }
+
+  closeDay(date: string, body: { counted_cash: string; cash_refunds_paid?: string; note?: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/admin/daily-closings/${encodeURIComponent(date)}`, body, { headers: this.getAuthHeaders() });
+  }
+
+  getSmsUsage(start: string, end: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/admin/sms-usage?${new URLSearchParams({ start, end })}`, { headers: this.getAuthHeaders() });
+  }
+
   getAuditLog(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/admin/audit-log`, { headers: this.getAuthHeaders() });
   }

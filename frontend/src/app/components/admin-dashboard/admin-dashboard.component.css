@@ -1161,3 +1161,20 @@
 
 .sidebar-menu a.menu-item { text-decoration: none; box-sizing: border-box; }
 .demo-readonly-banner { margin: 0 1.5rem 1rem; padding: .7rem 1rem; border: 1px solid #b8d7c4; border-radius: .6rem; background: #edf8f0; color: #245c39; font-weight: 600; }
+
+/* Phone layout: each booking is a card so Receive Payment / Approve / Cancel stay on screen without sideways scrolling. */
+@media (max-width: 767px) {
+  .bookings-table, .bookings-table tbody { display: block; width: 100%; }
+  .bookings-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .bookings-table tr { display: block; margin: 0 0 12px; padding: 4px 0; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(15,23,42,0.35); }
+  .bookings-table td { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 14px; border-bottom: 0; }
+  .bookings-table td[data-label]::before { content: attr(data-label); color: #94a3b8; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; padding-top: 2px; }
+  .bookings-table td[data-label=""] { display: block; text-align: center; }
+  .bookings-table td[data-label=""]::before { content: none; }
+  .bookings-table td:empty { display: none; }
+  .bookings-table td[data-label="Actions"] { border-top: 1px solid rgba(255,255,255,0.06); margin-top: 4px; padding-top: 12px; }
+  .bookings-table .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .bookings-table .btn-action { min-height: 44px; min-width: 44px; }
+  .bookings-table .payment-action { flex: 1 1 140px; }
+  .booking-pagination button, .booking-query-bar button { min-height: 44px; }
+}

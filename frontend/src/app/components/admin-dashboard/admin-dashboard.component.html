@@ -19,6 +19,7 @@
         <span class="badge badge-warn" *ngIf="pendingRecurringCount > 0">{{ pendingRecurringCount }}</span>
       </button>
       <a routerLink="/admin/dashboard/collections" [class.active]="activeTab === 'collections'" [attr.aria-current]="activeTab === 'collections' ? 'page' : null" class="menu-item"><span class="menu-icon">৳</span> Collections</a>
+      <a *ngIf="canManageOperations" routerLink="/admin/dashboard/daily-closing" [class.active]="activeTab === 'closing'" [attr.aria-current]="activeTab === 'closing' ? 'page' : null" class="menu-item"><span class="menu-icon">🧾</span> Daily Closing</a>
       <a *ngIf="canManageOperations" routerLink="/admin/dashboard/operations" [class.active]="activeTab === 'operations'" [attr.aria-current]="activeTab === 'operations' ? 'page' : null" class="menu-item"><span class="menu-icon">📒</span> Expenses & Activity</a>
       <a routerLink="/admin/dashboard/notifications" [class.active]="activeTab === 'notifications'" [attr.aria-current]="activeTab === 'notifications' ? 'page' : null" class="menu-item"><span class="menu-icon">✉</span> Notifications</a>
       <a *ngIf="!demoReadOnly" routerLink="/admin/dashboard/change-password" [class.active]="activeTab === 'security'" [attr.aria-current]="activeTab === 'security' ? 'page' : null" class="menu-item"><span class="menu-icon">🔑</span> Change Password</a>
@@ -191,7 +192,7 @@
         <!-- Bookings Table Panel -->
         <div class="table-card">
           <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table bookings-table">
               <thead>
                 <tr>
                   <th>Booking ID</th>
@@ -207,24 +208,24 @@
               </thead>
               <tbody>
                 <tr *ngFor="let booking of filteredBookings">
-                  <td class="td-date">#{{ booking.id }}</td>
-                  <td class="td-date">{{ booking.booking_date }}</td>
-                  <td class="td-time highlight">{{ booking.start_time }} - {{ booking.end_time }}</td>
-                  <td>
+                  <td data-label="Booking ID" class="td-date">#{{ booking.id }}</td>
+                  <td data-label="Date" class="td-date">{{ booking.booking_date }}</td>
+                  <td data-label="Time slot" class="td-time highlight">{{ booking.start_time }} - {{ booking.end_time }}</td>
+                  <td data-label="Customer">
                     <div class="cust-info">
                       <span class="cust-name">{{ booking.customer_name }}</span>
                       <span class="cust-phone">📞 {{ booking.customer_phone }}</span>
                       <span class="cust-email" *ngIf="booking.customer_email">📧 {{ booking.customer_email }}</span>
                     </div>
                   </td>
-                  <td><span class="team-badge" *ngIf="booking.team_name">{{ booking.team_name }}</span></td>
-                  <td>৳ {{ booking.price | number:'1.2-2' }}<small *ngIf="booking.price_source === 'legacy_estimate'" class="legacy-price" title="Estimated from the slot rate when migration 004 ran; the original historical price is unknown.">Legacy estimate</small></td>
-                  <td>
+                  <td data-label="Team"><span class="team-badge" *ngIf="booking.team_name">{{ booking.team_name }}</span></td>
+                  <td data-label="Price">৳ {{ booking.price | number:'1.2-2' }}<small *ngIf="booking.price_source === 'legacy_estimate'" class="legacy-price" title="Estimated from the slot rate when migration 004 ran; the original historical price is unknown.">Legacy estimate</small></td>
+                  <td data-label="Status">
                     <span class="status-badge" [ngClass]="'status-' + booking.status">
                       {{ booking.status }}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Payment">
                     <span class="payment-badge" [ngClass]="'pay-' + booking.payment_status">
                       {{ booking.payment_status }}
                     </span>
@@ -235,7 +236,7 @@
                       <button *ngIf="!demoReadOnly && (booking.refund_amount || 0) > (booking.refunded_amount || 0) && !['pending','retrying','initiating','submitted'].includes(booking.refund_payout_status || '')" class="btn btn-secondary" (click)="recordRefund(booking)">Record completed refund</button>
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Actions">
                     <div class="action-buttons" *ngIf="!demoReadOnly">
                       <!-- Approve Option -->
                       <button *ngIf="booking.status === 'pending'" (click)="updateBookingStatus(booking.id, 'approved')"
@@ -255,7 +256,7 @@
                   </td>
                 </tr>
                 <tr *ngIf="filteredBookings.length === 0">
-                  <td colspan="9" class="empty-table">{{ bookingsLoading ? 'Loading bookings…' : 'No records found matching filters.' }}</td>
+                  <td colspan="9" class="empty-table" data-label="">{{ bookingsLoading ? 'Loading bookings…' : 'No records found matching filters.' }}</td>
                 </tr>
               </tbody>
             </table>

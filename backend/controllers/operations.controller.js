@@ -1,4 +1,5 @@
 const db = require('../database');
+const { dateOnly } = require('../utils/dates');
 const moneyText = value => typeof value === 'number' ? value.toFixed(2) : String(value ?? '');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 async function query(sql, params = []) {
@@ -44,13 +45,13 @@ exports.expenses = async (req, res) => {
     const day = rowFor(dayInDhaka(entry.created_at));
     day.collected += (entry.kind === 'reversal' ? -1 : 1) * Number(entry.amount);
   }
-  for (const expense of expenses) if (expense.status === 'active') rowFor(String(expense.expense_date).slice(0, 10)).expenses += Number(expense.amount);
+  for (const expense of expenses) if (expense.status === 'active') rowFor(dateOnly(expense.expense_date)).expenses += Number(expense.amount);
   for (const day of days.values()) {
     day.collected = Number(day.collected.toFixed(2));
     day.expenses = Number(day.expenses.toFixed(2));
     day.net_after_expenses = Number((day.collected - day.expenses).toFixed(2));
   }
-  res.set('Cache-Control', 'no-store').json({ start, end, note: 'Net is recorded collections minus active recorded expenses; it is not profit and excludes refunds.', days: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)), expenses: expenses.map(row => ({ ...row, expense_date: String(row.expense_date).slice(0, 10) })) });
+  res.set('Cache-Control', 'no-store').json({ start, end, note: 'Net is recorded collections minus active recorded expenses; it is not profit and excludes refunds.', days: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)), expenses: expenses.map(row => ({ ...row, expense_date: dateOnly(row.expense_date) })) });
 };
 
 exports.addExpense = async (req, res) => {
@@ -80,4 +81,32 @@ exports.voidExpense = async (req, res) => {
     WHERE id=? AND status='active'`, [reason, id]);
   if (!result.affectedRows) throw fail('Expense not found or already voided', 404);
   res.json({ id, status: 'voided' });
+};
+
+const dailyClosing = require('../services/operations/daily-closing.service');
+const smsUsageReport = require('../services/notifications/sms-usage.service');
+
+exports.dailySummary = async (req, res) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+  res.set('Cache-Control', 'no-store').json(await dailyClosing.summary(req.query.date || today));
+};
+
+exports.dailyClosings = async (req, res) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+  const end = req.query.end || today;
+  const start = req.query.start || new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000).toISOString().slice(0, 10);
+  res.set('Cache-Control', 'no-store').json(await dailyClosing.history(start, end));
+};
+
+exports.closeDay = async (req, res) => {
+  const result = await dailyClosing.close(req.params.date, req.body, req.user);
+  res.locals.auditResourceId = req.params.date;
+  res.status(201).json(result);
+};
+
+exports.smsUsage = async (req, res) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+  const end = req.query.end || today;
+  const start = req.query.start || `${end.slice(0, 8)}01`;
+  res.set('Cache-Control', 'no-store').json(await smsUsageReport.report(start, end));
 };

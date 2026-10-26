@@ -60,7 +60,11 @@ Customer phone OTP verification is available and rate-limited. Automatic gateway
 
 Admin users can be owners, managers or staff; legacy `admin` accounts retain owner access. The authorization middleware applies role-specific write permissions. Successful admin mutations record method, route template, actor and status in `admin_audit_log` without storing request bodies. `venue_expenses` is a reasoned-void ledger; the operations report compares collected receipts with active expenses and does not label the result profit. Customers can submit cancellation requests for their own future bookings; an owner or manager reviews and approves/rejects them through the existing cancellation workflow.
 
-Booking SMS remains mock by default. `BOOKING_SMS_PROVIDER=json` opts into the HTTPS relay contract documented in [notification operations](docs/NOTIFICATIONS.md). Provider acceptance is tracked separately from mock simulation; delivery receipts are not ingested.
+Daily closing (migration 013, owner/manager only): `services/operations/daily-closing.service.js` computes one Asia/Dhaka day's cash vs online collections, cash expenses, completed refunds and expected drawer cash, and checks that each booking touched that day still has ledger entries equal to `bookings.amount_paid`. Staff enter counted cash; a difference needs a note. A correction supersedes the earlier row, so history is never overwritten. Money is handled in integer paisa. The app records the count; it does not know what physically happened to refunds paid in cash.
+
+SMS delivery receipts arrive at `POST /api/webhooks/sms-delivery` (bearer `SMS_WEBHOOK_SECRET`) and update `notification_jobs.delivery_status` and `sms_usage_log`. `sms_usage_log` stores no phone numbers or message text; estimated cost uses `SMS_UNIT_COST_BDT`. See [notification operations](docs/NOTIFICATIONS.md).
+
+Booking SMS remains mock by default. `BOOKING_SMS_PROVIDER=json` opts into the HTTPS relay contract documented in [notification operations](docs/NOTIFICATIONS.md). Provider acceptance is tracked separately from mock simulation; delivery is confirmed only by a provider receipt.
 
 The booking result view derives payment messages from a server summary of verified transactions, not redirect query parameters. It distinguishes staff approval from online payment, polls boundedly for delayed callbacks, and restores the last booking ID on a same-tab refresh. Dialogs trap focus, restore it on close, and protect an in-progress submission/navigation from accidental dismissal. Migration 003 introduces attempt metadata; staff use `npm run payment:reconcile -- --transaction ID` for uncertain attempts. See the deployment guide for response states and recovery.
 ## Booking price snapshots
@@ -74,6 +78,10 @@ Confirmation and each recurring occurrence persist the server-side rate in `book
 ## Admin configuration pages
 
 The dashboard shares its sidebar and header with two lazy-loaded, admin-guarded child routes: `/admin/dashboard/field-configuration` renders the venue branding editor; `/admin/dashboard/slot-setup` renders a standalone slot editor with its own modal/state and advance-payment form. Field saves explicitly allowlist branding fields; advance saves send only `advance_payment_percentage` to the existing settings API. This separation requires no API or schema changes.
+
+### Phone staff workflow
+
+Below 768px the admin bookings table renders each booking as a card (`bookings-table` with `data-label` cells), so Approve, Cancel and Receive Payment stay on screen without sideways scrolling; touch targets are at least 44px. Grid panels on Daily Closing and Expenses use `minmax(0,1fr)` so wide tables scroll inside their own wrapper. `npm run test:e2e:mobile --prefix frontend` checks the calendar, booking search, payment entry and both report pages at 360px and 390px against the production build with a mocked API (no database needed). It is a layout check, not a slow-network test.
 
 ### Booking search and export
 

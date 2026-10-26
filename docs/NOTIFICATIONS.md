@@ -71,8 +71,25 @@ The worker POSTs JSON `{to,message,sender_id,idempotency_key}`, sends the same k
 as `Idempotency-Key`, and authenticates with a Bearer token. The relay must accept
 this contract and deduplicate repeated keys. A non-2xx response or timeout is
 retried by the existing worker. Validate the relay in staging before enabling it
-in production. The app does not process delivery receipts or confirm handset
-delivery. OTP can use the same compatible relay independently.
+in production. OTP can use the same compatible relay independently.
+
+### Delivery receipts and SMS cost (migration 013)
+
+When the relay returns `{"message_id": "..."}` the id is stored on the job. Set
+`SMS_WEBHOOK_SECRET` (16+ characters) and have the provider call
+`POST /api/webhooks/sms-delivery` with `Authorization: Bearer <secret>` and body
+`{"message_id","status"}` or `{"receipts":[...]}` (max 100). Statuses
+`delivered` count as delivered; `failed`, `undelivered`, `rejected` and `expired`
+count as failed. Repeats are harmless and a delivered receipt is never
+downgraded. Without the secret the endpoint answers 503, and Admin → Notifications
+says delivery cannot be confirmed. Statuses read "Awaiting delivery receipt" until
+the provider reports; the app never claims handset delivery without a receipt.
+
+Every SMS handed to a provider (OTP or booking) adds a row to `sms_usage_log`
+without the phone number or message text. Admin → Daily Closing → *SMS usage and
+estimated cost* totals messages, billable parts and delivered receipts. The cost is
+`SMS_UNIT_COST_BDT` × parts for provider-accepted sends; simulated and failed
+sends cost nothing. It is an estimate: compare it with the provider invoice.
 
 ## Verification
 

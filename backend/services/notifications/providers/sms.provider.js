@@ -6,6 +6,7 @@
  * The mock performs no network calls and does not log personal information.
  */
 class MockSmsProvider {
+  get providerName() { return 'mock'; }
   async send({ to, message }) {
     // Simulation only. Never log recipients or message bodies.
     return { success: true, providerResponse: { mock: true } };
@@ -62,6 +63,7 @@ class BulkSmsBdProvider {
 /** Configurable JSON SMS endpoint for the not-yet-selected OTP provider.
  * Contract: POST {to,message,idempotency_key}; return 2xx on acceptance. */
 class OtpSmsProvider {
+  get providerName() { return 'json'; }
   constructor({ apiUrl = process.env.SMS_API_URL || '', apiKey = process.env.SMS_API_KEY || '', senderId = process.env.SMS_SENDER_ID || '' } = {}) {
     this.apiUrl = apiUrl;
     this.apiKey = apiKey;
@@ -83,7 +85,14 @@ class OtpSmsProvider {
         body: JSON.stringify({ to, message, sender_id: this.senderId || undefined, idempotency_key: idempotencyKey }),
         signal: AbortSignal.timeout(10000)
       });
-      return response.ok ? { success: true } : { success: false, error: `OTP SMS provider returned ${response.status}` };
+      if (!response.ok) return { success: false, error: `OTP SMS provider returned ${response.status}` };
+      // Optional: relays that return {"message_id": "..."} let delivery receipts be matched later.
+      let providerMessageId;
+      try {
+        const body = typeof response.json === 'function' ? await response.json() : null;
+        providerMessageId = body?.message_id ?? body?.id;
+      } catch { /* an empty or non-JSON 2xx body is still an acceptance */ }
+      return providerMessageId === undefined || providerMessageId === null ? { success: true } : { success: true, providerMessageId: String(providerMessageId) };
     } catch { return { success: false, error: 'OTP SMS delivery failed' }; }
   }
 }

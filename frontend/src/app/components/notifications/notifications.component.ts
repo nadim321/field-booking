@@ -23,6 +23,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   readonly events: NotificationEvent[]=['booking_created','booking_confirmed','booking_cancelled','reminder'];
   readonly statuses: NotificationStatus[]=['queued','processing','retrying','sent','simulated','failed','skipped'];
   readonly labels: Record<string,string>={queued:'Queued',processing:'Processing',retrying:'Retrying',sent:'Accepted by SMS provider',simulated:'Simulated — no SMS sent',failed:'Failed',skipped:'Skipped',booking_created:'Booking request',booking_confirmed:'Booking confirmation',booking_cancelled:'Cancellation',reminder:'Game reminder',manual_send:'Manual send requested',manual_retry:'Manual retry requested',interrupted:'Worker interrupted'};
+  readonly deliveryLabels: Record<string,string>={delivered:'Delivered (provider receipt)',failed:'Not delivered (provider receipt)'};
   readonly reasons: Record<string,string>={MANUAL_SEND_PENDING:'A manual send is already pending',NOT_SENDABLE:'This status cannot be sent manually',MOCK_SEND_FAILED:'Simulation failed',MOCK_SEND_FAILED_OR_TIMEOUT:'Simulation failed or timed out',WORKER_LEASE_EXPIRED:'Previous attempt interrupted',BOOKING_STATUS_CHANGED:'Booking status changed',BOOKING_NOT_APPROVED:'Booking is no longer approved',BOOKING_REMOVED:'Booking was removed',KICKOFF_PASSED:'Game has already started',SHORT_NOTICE_APPROVAL:'Approved less than 2 hours before kickoff',INVALID_KICKOFF:'Booking time needs correction',INVALID_RECIPIENT:'Phone number needs correction'};
   ngOnInit(): void { this.load(); this.timer=setInterval(()=>{if(!document.hidden&&!this.loading&&!this.retrying)this.load();},30000); }
   ngOnDestroy(): void {clearInterval(this.timer);this.listRequest?.unsubscribe();this.detailRequest?.unsubscribe();this.retryRequest?.unsubscribe();}
@@ -47,6 +48,6 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     if(this.retrying)return;
     this.retrying=true;this.notice='';this.error='';
     const key=this.requestKeys.get(id)||crypto.randomUUID();this.requestKeys.set(id,key);
-    this.retryRequest=this.api.resendNotification(id,key).pipe(timeout(15000)).subscribe({next:()=>{this.requestKeys.delete(id);this.retrying=false;this.notice='Queued for simulation. No real SMS will be sent.';this.load();},error:e=>{if(e.status>=400&&e.status<500)this.requestKeys.delete(id);this.retrying=false;this.error=e.error?.message||'Send could not be confirmed. Refresh before trying again.';}});
+    this.retryRequest=this.api.resendNotification(id,key).pipe(timeout(15000)).subscribe({next:()=>{this.requestKeys.delete(id);this.retrying=false;this.notice=this.data?.mode==='relay'?'Queued. It will be sent to the SMS provider within about a minute.':'Queued for simulation. No real SMS will be sent.';this.load();},error:e=>{if(e.status>=400&&e.status<500)this.requestKeys.delete(id);this.retrying=false;this.error=e.error?.message||'Send could not be confirmed. Refresh before trying again.';}});
   }
 }

@@ -14,6 +14,7 @@ export const routes: Routes = [
   { path: 'admin/dashboard', component: AdminDashboardComponent, canActivate: [adminGuard], children: [
     { path: 'collections', canActivate: [adminGuard], loadComponent: () => import('./components/collections/collections.component').then(m => m.CollectionsComponent) },
     { path: 'operations', canActivate: [adminGuard], loadComponent: () => import('./components/operations/operations.component').then(m => m.OperationsComponent) },
+    { path: 'daily-closing', canActivate: [adminGuard], loadComponent: () => import('./components/daily-closing/daily-closing.component').then(m => m.DailyClosingComponent) },
     { path: 'notifications', canActivate: [adminGuard], loadComponent: () => import('./components/notifications/notifications.component').then(m => m.NotificationsComponent) },
     { path: 'change-password', canActivate: [adminGuard], loadComponent: () => import('./components/admin-password-change/admin-password-change.component').then(m => m.AdminPasswordChangeComponent) },
     { path: 'admins', canActivate: [adminGuard], loadComponent: () => import('./components/admin-management/admin-management.component').then(m => m.AdminManagementComponent) },

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const db = require('../database');
 const controller = require('../controllers/operations.controller');
 
-function response() { return { statusCode: 200, status(code) { this.statusCode = code; return this; }, set() { return this; }, json(value) { this.value = value; return this; } }; }
+function response() { return { statusCode: 200, locals: {}, status(code) { this.statusCode = code; return this; }, set() { return this; }, json(value) { this.value = value; return this; } }; }
 
 test('expense creation validates input and stores actor attribution', async () => {
   const original = db.promiseConnection;
@@ -14,6 +14,7 @@ test('expense creation validates input and stores actor attribution', async () =
     await controller.addExpense({ body: { expense_date: '2026-10-25', category: 'Lights', amount: '150.50', method: 'cash', note: 'Replacement bulb' }, user: { id: 4, username: 'manager' } }, res);
     assert.equal(res.statusCode, 201);
     assert.deepEqual(res.value, { id: 17 });
+    assert.equal(res.locals.auditResourceId, 17);
     assert.match(saved.sql, /INSERT INTO venue_expenses/);
     assert.equal(saved.args[2], '150.50');
     assert.equal(saved.args[6], 4);

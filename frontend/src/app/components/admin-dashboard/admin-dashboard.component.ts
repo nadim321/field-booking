@@ -77,13 +77,13 @@ export class AdminDashboardComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   // Tabs navigation
-  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'field' | 'notifications' | 'collections' | 'blocking' | 'security' | 'admins' | 'operations' = 'calendar';
+  activeTab: 'calendar' | 'overview' | 'bookings' | 'season' | 'slots' | 'field' | 'notifications' | 'collections' | 'blocking' | 'security' | 'admins' | 'operations' | 'closing' = 'calendar';
 
   get pageTitle(): string {
-    return this.activeTab === 'operations' ? 'Expenses & Activity' : this.activeTab === 'collections' ? 'Collections' : this.activeTab === 'notifications' ? 'Notifications' : this.activeTab === 'field' ? 'Field Configuration' : this.activeTab === 'slots' ? 'Slot Setup' : this.activeTab === 'security' ? 'Change Password' : this.activeTab === 'admins' ? 'Admin Management' : 'Admin Control Panel';
+    return this.activeTab === 'closing' ? 'Daily Closing' : this.activeTab === 'operations' ? 'Expenses & Activity' : this.activeTab === 'collections' ? 'Collections' : this.activeTab === 'notifications' ? 'Notifications' : this.activeTab === 'field' ? 'Field Configuration' : this.activeTab === 'slots' ? 'Slot Setup' : this.activeTab === 'security' ? 'Change Password' : this.activeTab === 'admins' ? 'Admin Management' : 'Admin Control Panel';
   }
   get pageDescription(): string {
-    return this.activeTab === 'operations' ? 'Record expenses and review the administrator activity log.' : this.activeTab === 'collections' ? 'Record receipts, review corrections and reconcile daily collections.' : this.activeTab === 'notifications' ? 'Track booking notifications, reminders and retry attempts.' : this.activeTab === 'field' ? 'Manage your venue branding, photos, facilities and contact information.' : this.activeTab === 'slots' ? 'Manage slot times, prices, availability and advance payments.' : this.activeTab === 'security' ? 'Update your account password.' : this.activeTab === 'admins' ? 'Manage owner, manager and staff accounts.' : 'Manage bookings, configure turf slots, and analyze operations.';
+    return this.activeTab === 'closing' ? 'Match the day\'s cash with the booking ledger and review SMS usage.' : this.activeTab === 'operations' ? 'Record expenses and review the administrator activity log.' : this.activeTab === 'collections' ? 'Record receipts, review corrections and reconcile daily collections.' : this.activeTab === 'notifications' ? 'Track booking notifications, reminders and retry attempts.' : this.activeTab === 'field' ? 'Manage your venue branding, photos, facilities and contact information.' : this.activeTab === 'slots' ? 'Manage slot times, prices, availability and advance payments.' : this.activeTab === 'security' ? 'Update your account password.' : this.activeTab === 'admins' ? 'Manage owner, manager and staff accounts.' : 'Manage bookings, configure turf slots, and analyze operations.';
   }
   navigateTab(tab: 'calendar' | 'overview' | 'bookings' | 'season' | 'blocking'): void {
     this.router.navigate(['/admin/dashboard'], { queryParams: tab === 'calendar' ? {} : { tab } });
@@ -92,7 +92,7 @@ export class AdminDashboardComponent implements OnInit {
     const child = this.route.firstChild?.snapshot.routeConfig?.path;
     const tab = this.route.snapshot.queryParamMap.get('tab');
     const safeTab = this.demoReadOnly && tab === 'blocking' ? 'calendar' : tab;
-    this.activeTab = child === 'operations' ? 'operations' : child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'change-password' ? 'security' : child === 'admins' ? 'admins' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(safeTab || '') ? safeTab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
+    this.activeTab = child === 'daily-closing' ? 'closing' : child === 'operations' ? 'operations' : child === 'collections' ? 'collections' : child === 'notifications' ? 'notifications' : child === 'change-password' ? 'security' : child === 'admins' ? 'admins' : child === 'field-configuration' ? 'field' : child === 'slot-setup' ? 'slots' : ['overview','bookings','season','blocking'].includes(safeTab || '') ? safeTab as 'overview' | 'bookings' | 'season' | 'blocking' : 'calendar';
     if (this.activeTab === 'blocking') { this.loadSlots(); this.selectedSlotIdsForBlock.clear(); this.loadBlockPreview(); }
   }
 

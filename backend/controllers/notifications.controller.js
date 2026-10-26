@@ -1,4 +1,5 @@
 const outbox=require('../services/notifications/outbox.service');
+const config=require('../config/env');
 const iso=value=>value==null?null:new Date(Number(value)).toISOString();
 function positive(value,label) {
   if (!/^\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value)<1) throw outbox.failure(`Invalid ${label}`,400);
@@ -9,7 +10,7 @@ function project(row) {
   return {id:row.id,booking_id:row.booking_id,event:row.event,status:row.status,
     recipient:row.recipient ? '••••'+row.recipient.slice(-4):'Missing number',
     scheduled_at:iso(row.scheduled_at),next_attempt_at:iso(row.next_attempt_at),updated_at:iso(row.updated_at),
-    attempts:row.attempts,last_error:row.last_error,source_job_id:row.source_job_id,requested_by:row.requested_by,
+    attempts:row.attempts,last_error:row.last_error,delivery_status:row.delivery_status||null,delivery_updated_at:iso(row.delivery_updated_at),source_job_id:row.source_job_id,requested_by:row.requested_by,
     can_resend:!outbox.manualReason(row,b,Date.now())&&!row.active_manual,
     resend_unavailable_reason:outbox.manualReason(row,b,Date.now()) || (row.active_manual?'MANUAL_SEND_PENDING':null),
     can_retry:row.status==='failed'&&!outbox.manualReason(row,b,Date.now())&&!row.active_manual};
@@ -29,7 +30,7 @@ exports.list=async(req,res)=>{
   const result=await outbox.transaction(async c=>{
     const [[count]]=await c.query('SELECT COUNT(*) AS total FROM notification_jobs j'+clause,params);
     const [rows]=await c.query(select+clause+' ORDER BY j.id DESC LIMIT ? OFFSET ?',[...params,size,(page-1)*size]);
-    return {mode:'mock',page,page_size:size,total:count.total,items:rows.map(project)};
+    return {mode:config.bookingSmsProvider==='json'?'relay':'mock',delivery_receipts_enabled:(process.env.SMS_WEBHOOK_SECRET||'').length>=16,page,page_size:size,total:count.total,items:rows.map(project)};
   });
   res.set('Cache-Control','no-store').json(result);
 };
