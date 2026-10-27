@@ -143,3 +143,14 @@ additional sends for the same original notification. Backups and restores must
 include `notification_resend_requests` along with jobs and attempt history so
 request deduplication survives restart/restore. The mock default and 1/5/15-minute
 retry delays remain unchanged.
+
+## Email transport
+
+Email uses nodemailer. `EMAIL_USER` and `EMAIL_PASS` are required. `EMAIL_SERVICE`
+chooses a well-known service (`gmail` by default; Gmail needs an App Password, not
+the account password). For a cPanel or other custom mailbox set `EMAIL_HOST`
+(for example `mail.yourdomain.com`), which replaces `EMAIL_SERVICE`, with
+`EMAIL_PORT` (default 465, SSL) and `EMAIL_SECURE` (`false` for port 587/STARTTLS).
+Set these in the host's environment variables; `.env` is not part of the release ZIP.
+A send failure is logged as `[SmtpEmailProvider] Failed to send email: ...` and is
+not shown in the admin screens.

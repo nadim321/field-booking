@@ -31,28 +31,39 @@ class MockEmailProvider {
 }
 
 /**
- * GmailSmtpProvider
+ * Builds nodemailer transport options from environment variables.
+ *
+ *   EMAIL_SERVICE  nodemailer well-known service name (gmail, outlook, zoho, ...). Default: gmail.
+ *   EMAIL_HOST     custom SMTP host, e.g. mail.yourdomain.com for a cPanel mailbox.
+ *                  When set it is used INSTEAD of EMAIL_SERVICE.
+ *   EMAIL_PORT     default 465
+ *   EMAIL_SECURE   true/false; default true only for port 465 (587 uses STARTTLS)
+ *
+ * Gmail needs a 16-character App Password in EMAIL_PASS (2-Step Verification on),
+ * never the normal account password. A cPanel mailbox uses its own address and password.
+ */
+function buildTransportOptions(env = process.env) {
+  const auth = { user: env.EMAIL_USER || '', pass: env.EMAIL_PASS || '' };
+  const host = (env.EMAIL_HOST || '').trim();
+  if (host) {
+    const port = Number(env.EMAIL_PORT) || 465;
+    const secure = env.EMAIL_SECURE === undefined || env.EMAIL_SECURE === '' ? port === 465 : String(env.EMAIL_SECURE).toLowerCase() === 'true';
+    return { host, port, secure, auth };
+  }
+  return { service: (env.EMAIL_SERVICE || 'gmail').trim().toLowerCase(), auth };
+}
+
+/**
+ * SmtpEmailProvider (exported as GmailSmtpProvider for compatibility)
  * ------------------
- * Sends real email via Gmail's SMTP server using nodemailer.
- *
- * IMPORTANT -- Gmail will NOT accept your normal account password here.
- * You must:
- *   1. Turn on 2-Step Verification on the Gmail account
- *   2. Generate an "App Password" at https://myaccount.google.com/apppasswords
- *   3. Put that 16-character app password in .env as EMAIL_PASS
- *      (NOT your real Gmail login password)
- *
- * Required .env variables:
- *   EMAIL_USER = nadim.hq321@gmail.com
- *   EMAIL_PASS = <16-character app password, no spaces>
- *   EMAIL_FROM = "Kickoff Arena <nadim.hq321@gmail.com>"   (optional, defaults to EMAIL_USER)
+ * Sends real email through the SMTP service/host chosen by the variables above.
+ * Required: EMAIL_USER, EMAIL_PASS. Optional: EMAIL_FROM (defaults to EMAIL_USER).
  *
  * The transporter is created lazily (on first send, not at require time)
  * so a missing/bad config doesn't crash the whole server on startup --
- * it just makes send() fail gracefully and log an error, the same as any
- * other provider failure in this module.
+ * it just makes send() fail gracefully and log an error.
  */
-class GmailSmtpProvider {
+class SmtpEmailProvider {
   constructor() {
     this.user = process.env.EMAIL_USER || '';
     this.pass = process.env.EMAIL_PASS || '';
@@ -62,20 +73,13 @@ class GmailSmtpProvider {
 
   _getTransporter() {
     if (this._transporter) return this._transporter;
-
-    this._transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: this.user,
-        pass: this.pass
-      }
-    });
+    this._transporter = nodemailer.createTransport(buildTransportOptions());
     return this._transporter;
   }
 
   async send({ to, subject, message, attachments }) {
     if (!this.user || !this.pass) {
-      console.error('[GmailSmtpProvider] Missing EMAIL_USER / EMAIL_PASS in environment. Falling back to no-op.');
+      console.error('[SmtpEmailProvider] Missing EMAIL_USER / EMAIL_PASS in environment. Falling back to no-op.');
       return { success: false, error: 'Email provider not configured' };
     }
 
@@ -93,7 +97,7 @@ class GmailSmtpProvider {
       const info = await transporter.sendMail(mailOptions);
       return { success: true, providerResponse: { messageId: info.messageId } };
     } catch (err) {
-      console.error('[GmailSmtpProvider] Failed to send email:', err.message);
+      console.error('[SmtpEmailProvider] Failed to send email:', err.message);
       return { success: false, error: err.message };
     }
   }
@@ -101,9 +105,11 @@ class GmailSmtpProvider {
 
 module.exports = {
   MockEmailProvider,
-  GmailSmtpProvider,
-  // Active provider -- now sending real email via Gmail SMTP.
+  SmtpEmailProvider,
+  GmailSmtpProvider: SmtpEmailProvider,
+  buildTransportOptions,
+  // Active provider -- sends real email through the SMTP service/host from the environment.
   // Swap back to `new MockEmailProvider()` for local dev/testing if you
   // don't want real emails going out.
-  activeProvider: new GmailSmtpProvider()
+  activeProvider: new SmtpEmailProvider()
 };
