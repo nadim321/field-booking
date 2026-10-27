@@ -11,6 +11,7 @@ import { Subscription, timeout } from 'rxjs';
 import { DialogDirective } from '../../directives/dialog.directive';
 import { BookingResult, PaymentOutcome, resultOutcome } from '../../services/payment-result';
 import { ApiService } from '../../services/api.service';
+import { newUuid } from '../../services/uuid';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 
 interface TurfSlot {
@@ -598,7 +599,7 @@ export class BookingPortalComponent implements OnInit, OnDestroy {
   private paymentKey(id: number): string {
     let key = this.paymentKeys.get(id);
     try { key ||= sessionStorage.getItem('payment-key-' + id) || undefined; } catch { /* Storage unavailable. */ }
-    key ||= crypto.randomUUID();
+    key ||= newUuid();
     this.paymentKeys.set(id, key);
     try { sessionStorage.setItem('payment-key-' + id, key); } catch { /* Storage unavailable. */ }
     return key;

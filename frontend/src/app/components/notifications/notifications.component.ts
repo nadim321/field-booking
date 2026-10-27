@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription, timeout } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { newUuid } from '../../services/uuid';
 import { NotificationDetail, NotificationEvent, NotificationPage, NotificationStatus } from '../../services/notifications';
 
 @Component({ selector:'app-notifications', standalone:true, imports:[CommonModule,FormsModule], templateUrl:'./notifications.component.html', styleUrl:'./notifications.component.css' })
@@ -47,7 +48,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   resend(id:number): void {
     if(this.retrying)return;
     this.retrying=true;this.notice='';this.error='';
-    const key=this.requestKeys.get(id)||crypto.randomUUID();this.requestKeys.set(id,key);
+    const key=this.requestKeys.get(id)||newUuid();this.requestKeys.set(id,key);
     this.retryRequest=this.api.resendNotification(id,key).pipe(timeout(15000)).subscribe({next:()=>{this.requestKeys.delete(id);this.retrying=false;this.notice=this.data?.mode==='relay'?'Queued. It will be sent to the SMS provider within about a minute.':'Queued for simulation. No real SMS will be sent.';this.load();},error:e=>{if(e.status>=400&&e.status<500)this.requestKeys.delete(id);this.retrying=false;this.error=e.error?.message||'Send could not be confirmed. Refresh before trying again.';}});
   }
 }
